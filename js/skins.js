@@ -129,19 +129,19 @@ const SKINS_DATA = {
 };
 
 const RARITY_COLORS = {
-  common: '#6b7280',
-  uncommon: '#22c55e',
-  rare: '#3b82f6',
-  epic: '#8b5cf6',
-  legendary: '#f59e0b'
+  common:    '#b4b4b4',
+  uncommon:  '#00c864',
+  rare:      '#0078d4',
+  epic:      '#8b5cf6',
+  legendary: '#f5c518',
 };
 
 const RARITY_NAMES = {
-  common: 'Gewöhnlich',
-  uncommon: 'Ungewöhnlich',
-  rare: 'Selten',
-  epic: 'Episch',
-  legendary: 'Legendär'
+  common:    'GEWÖHNLICH',
+  uncommon:  'UNGEWÖHNLICH',
+  rare:      'SELTEN',
+  epic:      'EPISCH',
+  legendary: 'LEGENDÄR',
 };
 
 // Draw a player character on a canvas

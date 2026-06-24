@@ -1371,22 +1371,6 @@ const ALL_GUNS = [
   { id:'laser',   name:'Lasergewehr',    icon:'🌟',  dmg:35,  rate:0.15, maxAmmo:20, maxRes:60,  spread:0.005, range:800,  crit:0.15, rarity:'legendary', desc:'Kein Streuung · 35 Schaden' },
 ];
 
-const RARITY_COLORS = {
-  common:    '#b4b4b4',
-  uncommon:  '#00c864',
-  rare:      '#0078d4',
-  epic:      '#8b5cf6',
-  legendary: '#f5c518',
-};
-
-const RARITY_NAMES = {
-  common:    'GEWÖHNLICH',
-  uncommon:  'UNGEWÖHNLICH',
-  rare:      'SELTEN',
-  epic:      'EPISCH',
-  legendary: 'LEGENDÄR',
-};
-
 // Selected loadout (3 indices into ALL_GUNS)
 let selectedLoadout = [0, 1, 2];
 
