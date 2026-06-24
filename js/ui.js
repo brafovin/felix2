@@ -179,6 +179,20 @@ function showLevelUpNotification(level) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   syncUnlockState();
-  showScreen('control-select');
   updateMenuStats();
+
+  // Restore previously chosen control mode so returning players skip the selector
+  try {
+    const saved = localStorage.getItem('fortclash_control');
+    if (saved && window.selectControlMode) {
+      selectControlMode(saved);   // sets controlMode + shows main-menu
+    } else {
+      showScreen('control-select');
+    }
+  } catch (e) {
+    showScreen('control-select');
+  }
+
+  // Auto-join if URL contains ?room=CODE
+  if (window.mpCheckUrlRoom) mpCheckUrlRoom();
 });

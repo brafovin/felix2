@@ -454,11 +454,16 @@ function buildStormMesh() {
   scene.add(stormWall);
 }
 
+let _stormLastR = -1;
 function refreshStormMesh() {
   if (!stormWall) return;
-  stormWall.geometry.dispose();
-  stormWall.geometry = new THREE.CylinderGeometry(sCR, sCR, 400, 80, 1, true);
-  stormWall.position.set(sCX, 100, sCZ);
+  // Only rebuild geometry when radius changes meaningfully — not every frame
+  if (Math.abs(sCR - _stormLastR) > 0.5) {
+    stormWall.geometry.dispose();
+    stormWall.geometry = new THREE.CylinderGeometry(sCR, sCR, 400, 64, 1, true);
+    stormWall.position.set(sCX, 100, sCZ);
+    _stormLastR = sCR;
+  }
   stormWall.material.opacity = 0.22 + 0.12 * Math.sin(Date.now() * 0.0018);
 }
 
@@ -995,17 +1000,20 @@ function spawnTracer(start, end) {
   mesh.position.copy(mid);
   mesh.lookAt(end);
   scene.add(mesh);
-  hitFX.push({ mesh, life: 0.09, maxLife: 0.09, vx: 0, vy: 0, vz: 0 });
+  hitFX.push({ mesh, life: 0.09, maxLife: 0.09, isTracer: true, vx: 0, vy: 0, vz: 0 });
 }
 
 // =============================================================================
 //  HIT EFFECTS
 // =============================================================================
 
+const _hitGeo = new THREE.SphereGeometry(0.06, 4, 4);
+
 function spawnHitFX(pos, color) {
+  if (hitFX.length > 200) return; // hard cap to prevent runaway
   for (let i = 0; i < 5; i++) {
     const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(0.06, 4, 4),
+      _hitGeo,
       new THREE.MeshBasicMaterial({ color, transparent: true })
     );
     mesh.position.copy(pos);
@@ -1024,8 +1032,14 @@ function tickFX(dt) {
     f.mesh.position.y += f.vy * dt;
     f.mesh.position.z += f.vz * dt;
     f.vy -= 12 * dt;
-    f.mesh.material.opacity = f.life / 0.3;
-    if (f.life <= 0) { scene.remove(f.mesh); return false; }
+    const maxLife = f.isTracer ? 0.09 : 0.3;
+    f.mesh.material.opacity = Math.max(0, f.life / maxLife) * (f.isTracer ? 0.85 : 1);
+    if (f.life <= 0) {
+      scene.remove(f.mesh);
+      if (f.isTracer) f.mesh.geometry.dispose();
+      f.mesh.material.dispose();
+      return false;
+    }
     return true;
   });
 }
@@ -1114,6 +1128,7 @@ function startGame(opts) {
   sCX = 0; sCZ = 0; sCR = WORLD_SIZE * 0.55;
   sTX = 0; sTZ = 0; sTR = sCR;
   sShrinking = false; sTimer = S_PHASES[0].wait; sPhase = 0; sDmg = 2; sWarned = false;
+  _stormLastR = -1;
   buildStormMesh();
 
   gameTime = 0; startTime = Date.now();

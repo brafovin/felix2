@@ -4,19 +4,24 @@
 (function () {
   const PREFIX = 'fortclashv1-';
   let peer = null, isHost = false, myId = null, hostConn = null;
-  const conns = {};                 // host: peerId -> DataConnection
+  const conns = {};
   let roomCode = null, maxPlayers = 4, localName = 'Spieler';
-  let lobbyPlayers = [];            // [{id, name}]
+  let lobbyPlayers = [];
   let started = false, lastSent = 0;
   let _createRetries = 0;
 
-  // Explicit STUN servers for better WebRTC connectivity
+  // STUN + free TURN servers for reliable NAT traversal across all platforms/networks
   const ICE_CFG = {
     iceServers: [
       { urls: 'stun:stun.l.google.com:19302' },
       { urls: 'stun:stun1.l.google.com:19302' },
-      { urls: 'stun:stun2.l.google.com:19302' },
-      { urls: 'stun:stun3.l.google.com:19302' },
+      { urls: 'stun:stun.relay.metered.ca:80' },
+      { urls: 'turn:openrelay.metered.ca:80',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443',
+        username: 'openrelayproject', credential: 'openrelayproject' },
+      { urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+        username: 'openrelayproject', credential: 'openrelayproject' },
     ]
   };
 
@@ -34,6 +39,23 @@
     if (!e) return;
     e.textContent = msg || '';
     e.style.color = ok ? '#22c55e' : (msg ? '#f87171' : '#aaa');
+  }
+
+  function _setUrl(code) {
+    try {
+      const u = new URL(location.href);
+      if (code) u.searchParams.set('room', code);
+      else u.searchParams.delete('room');
+      history.replaceState(null, '', u.toString());
+    } catch (e) {}
+  }
+
+  function _shareUrl() {
+    try {
+      const u = new URL(location.href);
+      u.searchParams.set('room', roomCode);
+      return u.toString();
+    } catch (e) { return roomCode; }
   }
 
   function ensurePeerLib(cb) {
@@ -63,7 +85,9 @@
         _createRetries = 0;
         myId = 'HOST';
         lobbyPlayers = [{ id: 'HOST', name: localName }];
+        _setUrl(roomCode);
         showRoom(); renderLobby(); netStatus('', true);
+        _updateShareBtn();
       });
       peer.on('connection', conn => {
         if (started || Object.keys(conns).length + 1 >= maxPlayers) {
@@ -84,7 +108,6 @@
       });
       peer.on('error', e => {
         if (e.type === 'unavailable-id' && _createRetries < 5) {
-          // Room code taken — generate a new one and retry
           _createRetries++;
           roomCode = rcode();
           netStatus('Code vergeben, versuche neuen Code…', false);
@@ -99,9 +122,7 @@
           netStatus(msgs[e.type] || ('Fehler: ' + (e.type || e)));
         }
       });
-      peer.on('disconnected', () => {
-        if (!started) { netStatus('Verbindung zum Server verloren.'); }
-      });
+      peer.on('disconnected', () => { if (!started) netStatus('Verbindung zum Server verloren.'); });
     });
   }
 
@@ -133,7 +154,9 @@
     Object.values(conns).forEach(c => { try { c.send(msg); } catch (e) {} });
   }
   function relay(d, exceptId) {
-    Object.entries(conns).forEach(([id, c]) => { if (id !== exceptId) { try { c.send(d); } catch (e) {} } });
+    Object.entries(conns).forEach(([id, c]) => {
+      if (id !== exceptId) { try { c.send(d); } catch (e) {} }
+    });
   }
 
   function startMatchHost() {
@@ -144,9 +167,10 @@
   }
 
   // ── CLIENT ────────────────────────────────────────────────────────────────
-  function joinRoom() {
+  function joinRoom(codeOverride) {
     isHost = false; started = false;
-    const code = (($('mp-joincode') || {}).value || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+    const raw = codeOverride || (($('mp-joincode') || {}).value) || '';
+    const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
     if (code.length < 4) { netStatus('Bitte 4-stelligen Code eingeben.'); return; }
     roomCode = code;
     localName = (($('mp-name') || {}).value || 'Spieler').slice(0, 14) || 'Spieler';
@@ -164,12 +188,8 @@
           netStatus('Verbunden — warte auf Host…', true);
         });
         conn.on('data', d => clientOnData(d));
-        conn.on('close', () => {
-          if (!started) netStatus('Verbindung getrennt.');
-        });
-        conn.on('error', err => {
-          netStatus('Verbindungsfehler: ' + (err.type || err));
-        });
+        conn.on('close', () => { if (!started) netStatus('Verbindung getrennt.'); });
+        conn.on('error', err => netStatus('Verbindungsfehler: ' + (err.type || err)));
       });
       peer.on('error', e => {
         const msgs = {
@@ -180,9 +200,7 @@
         };
         netStatus(msgs[e.type] || ('Fehler: ' + (e.type || e)));
       });
-      peer.on('disconnected', () => {
-        if (!started) netStatus('Verbindung zum Server verloren.');
-      });
+      peer.on('disconnected', () => { if (!started) netStatus('Verbindung zum Server verloren.'); });
     });
   }
 
@@ -206,6 +224,12 @@
     else if (hostConn && hostConn.open) { try { hostConn.send(obj); } catch (e) {} }
   }
 
+  function _updateShareBtn() {
+    const btn = $('mp-share-btn');
+    if (!btn) return;
+    btn.dataset.url = _shareUrl();
+  }
+
   const NET = {
     active: false,
     tick() {
@@ -219,7 +243,8 @@
       sendLocal(s);
     },
     sendShot(a, b) {
-      const obj = { t: 'shot', id: isHost ? 'HOST' : myId, sx: a.x, sy: a.y, sz: a.z, ex: b.x, ey: b.y, ez: b.z };
+      const obj = { t: 'shot', id: isHost ? 'HOST' : myId,
+        sx: a.x, sy: a.y, sz: a.z, ex: b.x, ey: b.y, ez: b.z };
       sendLocal(obj);
     },
     sendHit(targetId, dmg) {
@@ -232,6 +257,7 @@
     },
     leave() {
       NET.active = false; started = false; _createRetries = 0;
+      _setUrl(null);
       try { Object.values(conns).forEach(c => c.close()); } catch (e) {}
       try { if (hostConn) hostConn.close(); } catch (e) {}
       try { if (peer) peer.destroy(); } catch (e) {}
@@ -259,11 +285,40 @@
     const sb = $('mp-start-btn'); if (sb) sb.style.display = isHost ? 'inline-block' : 'none';
     const wm = $('mp-wait'); if (wm) wm.style.display = isHost ? 'none' : 'block';
   }
+
   function showRoom() { if (window.showScreen) showScreen('mp-room'); renderLobby(); }
 
-  window.openMultiplayer = function () { if (window.showScreen) showScreen('multiplayer'); netStatus(''); };
-  window.mpCreateRoom = createRoom;
-  window.mpJoinRoom = joinRoom;
-  window.mpStartMatch = startMatchHost;
-  window.mpLeaveRoom = function () { NET.leave(); if (window.showScreen) showScreen('main-menu'); };
+  window.openMultiplayer = function () {
+    if (window.showScreen) showScreen('multiplayer');
+    netStatus('');
+  };
+  window.mpCreateRoom  = createRoom;
+  window.mpJoinRoom    = joinRoom;
+  window.mpStartMatch  = startMatchHost;
+  window.mpLeaveRoom   = function () {
+    NET.leave();
+    if (window.showScreen) showScreen('main-menu');
+  };
+  window.mpShareCopy   = function (btn) {
+    const url = btn.dataset.url || _shareUrl();
+    navigator.clipboard && navigator.clipboard.writeText(url)
+      .then(() => { btn.textContent = '✓ Link kopiert!'; setTimeout(() => btn.textContent = '🔗 Link teilen', 2000); })
+      .catch(() => { btn.textContent = url; });
+  };
+
+  // ── URL auto-join ──────────────────────────────────────────────────────────
+  // Called from ui.js after the page loads to check for ?room=CODE
+  window.mpCheckUrlRoom = function () {
+    try {
+      const params = new URLSearchParams(location.search);
+      const code = (params.get('room') || '').toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 4);
+      if (code.length === 4) {
+        const el = $('mp-joincode'); if (el) el.value = code;
+        if (window.showScreen) showScreen('multiplayer');
+        netStatus('Raum ' + code + ' — Drücke BEITRETEN!', true);
+        return true;
+      }
+    } catch (e) {}
+    return false;
+  };
 })();

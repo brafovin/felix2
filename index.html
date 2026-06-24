@@ -276,9 +276,9 @@
   </div>
   <div class="mp-wrap">
     <div class="mp-roominfo">Spieler <span id="mp-count">1/4</span></div>
-    <button class="btn btn-secondary" style="font-size:13px;padding:6px 18px;margin:4px 0 10px;"
-      onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('mp-room-code').textContent).then(()=>this.textContent='✓ Kopiert!').catch(()=>{});this.textContent='✓ Kopiert!'">
-      📋 Code kopieren
+    <button id="mp-share-btn" class="btn btn-secondary" style="font-size:13px;padding:6px 18px;margin:4px 0 10px;"
+      onclick="mpShareCopy(this)">
+      🔗 Link teilen
     </button>
     <div id="mp-player-list" class="mp-player-list"></div>
     <button id="mp-start-btn" class="btn btn-primary big" onclick="mpStartMatch()">SPIEL STARTEN ▶</button>
