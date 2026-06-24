@@ -166,19 +166,72 @@ function buildWorld() {
   ground.receiveShadow = true;
   mapGroup.add(ground);
 
-  // Objects
+  // Road network + towns of houses
   const rng = seededRng(42);
-  for (let i = 0; i < 180; i++) {
+  addRoadGrid(mapGroup);
+  addTowns(mapGroup, rng);
+
+  // Scattered nature + extra buildings
+  for (let i = 0; i < 200; i++) {
     const x = (rng() - 0.5) * WORLD_SIZE * 0.92;
     const z = (rng() - 0.5) * WORLD_SIZE * 0.92;
     const r = rng();
     if      (r < 0.42) addTree(mapGroup, x, z, rng);
-    else if (r < 0.62) addRock(mapGroup, x, z, rng);
-    else if (r < 0.76) addBush(mapGroup, x, z, rng);
+    else if (r < 0.60) addRock(mapGroup, x, z, rng);
+    else if (r < 0.72) addBush(mapGroup, x, z, rng);
     else               addBuilding(mapGroup, x, z, rng);
   }
 
   scene.add(mapGroup);
+}
+
+// Grid of roads with center dashes, segmented to follow terrain
+const ROAD_LINES = () => {
+  const h = WORLD_SIZE / 2;
+  return [-h*0.62, -h*0.21, h*0.21, h*0.62];
+};
+
+function addRoadStrip(g, mat, lineMat, fixed, alongZ, roadW, seg, reach) {
+  for (let t = -reach; t <= reach; t += seg) {
+    const x = alongZ ? fixed : t;
+    const z = alongZ ? t : fixed;
+    const y = terrainHeight(x, z) + 0.07;
+    const w = alongZ ? roadW : seg;
+    const d = alongZ ? seg : roadW;
+    const road = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), mat);
+    road.position.set(x, y, z);
+    road.receiveShadow = true;
+    g.add(road);
+    const dash = new THREE.Mesh(
+      new THREE.BoxGeometry(alongZ ? 0.5 : seg*0.45, 0.16, alongZ ? seg*0.45 : 0.5),
+      lineMat
+    );
+    dash.position.set(x, y + 0.02, z);
+    g.add(dash);
+  }
+}
+
+function addRoadGrid(g) {
+  const roadMat = new THREE.MeshLambertMaterial({ color: 0x2c2c30 });
+  const lineMat = new THREE.MeshBasicMaterial({ color: 0xd8c84a });
+  const reach   = WORLD_SIZE * 0.46;
+  const roadW   = 13, seg = 26;
+  ROAD_LINES().forEach(p => addRoadStrip(g, roadMat, lineMat, p, true,  roadW, seg, reach));
+  ROAD_LINES().forEach(p => addRoadStrip(g, roadMat, lineMat, p, false, roadW, seg, reach));
+}
+
+// Rows of houses lining the roads
+function addTowns(g, rng) {
+  const reach = WORLD_SIZE * 0.42;
+  ROAD_LINES().forEach(roadX => {
+    for (let z = -reach; z <= reach; z += 38) {
+      [-1, 1].forEach(side => {
+        if (rng() < 0.45) return;
+        const x = roadX + side * 17 + (rng()-0.5)*5;
+        addBuilding(g, x, z + (rng()-0.5)*8, rng);
+      });
+    }
+  });
 }
 
 // Terrain height at a world (x, z) — must match addGroundVariation exactly
