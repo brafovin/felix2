@@ -486,7 +486,7 @@ function spawnChests3d() {
   chests3d.forEach(c => scene.remove(c.group));
   chests3d = [];
   const rng = seededRng(123);
-  for (let i = 0; i < 55; i++) {
+  for (let i = 0; i < 110; i++) {
     const x = (rng() - 0.5) * WORLD_SIZE * 0.9;
     const z = (rng() - 0.5) * WORLD_SIZE * 0.9;
     const grp = makeChestMesh();
