@@ -3,7 +3,7 @@
            showScreen, addKillFeedEntry, showXPNotif, showLevelUpNotification,
            updateMenuStats, SKINS_DATA */
 
-const WORLD_SIZE  = 3000;
+const WORLD_SIZE  = 1800;
 const INIT_BOTS   = 39;
 
 // ── Scene globals ─────────────────────────────────────────────────────────────
@@ -45,11 +45,11 @@ let sTX = 0, sTZ = 0, sTR = sCR;
 let sShrinking = false, sTimer = 60, sPhase = 0, sDmg = 2, sWarned = false;
 let stormWall = null;
 const S_PHASES = [
-  {wait:60, tr:1200, dur:30, dmg:2 },
-  {wait:45, tr:700,  dur:25, dmg:3 },
-  {wait:35, tr:400,  dur:20, dmg:5 },
-  {wait:25, tr:200,  dur:15, dmg:8 },
-  {wait:20, tr:80,   dur:12, dmg:12},
+  {wait:60, tr:720, dur:30, dmg:2 },
+  {wait:45, tr:420, dur:25, dmg:3 },
+  {wait:35, tr:240, dur:20, dmg:5 },
+  {wait:25, tr:120, dur:15, dmg:8 },
+  {wait:20, tr:50,  dur:12, dmg:12},
 ];
 
 // ── Enemies ───────────────────────────────────────────────────────────────────
@@ -181,12 +181,19 @@ function buildWorld() {
   scene.add(mapGroup);
 }
 
+// Terrain height at a world (x, z) — must match addGroundVariation exactly
+// so that player/enemy/object collision lines up with the visible ground.
+function terrainHeight(x, z) {
+  return Math.sin(x * 0.008) * Math.cos(z * 0.007) * 2.0 +
+         Math.sin(x * 0.022 - z * 0.015) * 0.8;
+}
+
 function addGroundVariation(geo) {
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), y = pos.getY(i);
-    const h = Math.sin(x * 0.008) * Math.cos(y * 0.007) * 2.0 + Math.sin(x * 0.022 + y * 0.015) * 0.8;
-    pos.setZ(i, h);
+    // local plane coords (lx, ly) map to world (lx, -ly) after rotation.x = -PI/2
+    const lx = pos.getX(i), ly = pos.getY(i);
+    pos.setZ(i, terrainHeight(lx, -ly));
   }
   geo.computeVertexNormals();
 }
@@ -217,7 +224,7 @@ function addTree(g, x, z, rng) {
     cy += ch * 0.55;
   });
 
-  tr.position.set(x, 0, z);
+  tr.position.set(x, terrainHeight(x, z), z);
   tr.userData = { solidR: 0.4 };
   g.add(tr);
 }
@@ -226,7 +233,7 @@ function addRock(g, x, z, rng) {
   const r = 1.0 + rng() * 1.8;
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(r, 7, 6), _rockMat);
   mesh.scale.set(0.9 + rng()*0.4, 0.45 + rng()*0.35, 0.85 + rng()*0.4);
-  mesh.position.set(x, r * 0.5, z);
+  mesh.position.set(x, terrainHeight(x, z) + r * 0.5, z);
   mesh.castShadow = true;
   mesh.userData = { solidR: r * 1.1 };
   g.add(mesh);
@@ -235,7 +242,7 @@ function addRock(g, x, z, rng) {
 function addBush(g, x, z, rng) {
   const mesh = new THREE.Mesh(new THREE.SphereGeometry(1.1 + rng(), 6, 5), _bushMat);
   mesh.scale.set(1.2 + rng()*0.4, 0.55 + rng()*0.3, 1.0 + rng()*0.3);
-  mesh.position.set(x, 0.7, z);
+  mesh.position.set(x, terrainHeight(x, z) + 0.7, z);
   g.add(mesh);
 }
 
@@ -265,7 +272,7 @@ function addBuilding(g, x, z, rng) {
     grp.add(win);
   });
 
-  grp.position.set(x, 0, z);
+  grp.position.set(x, terrainHeight(x, z), z);
   grp.userData = { solidHW: w / 2, solidHD: d / 2, h };
   g.add(grp);
 }
@@ -312,9 +319,10 @@ function spawnPickups3d() {
       color: colors[type], emissive: colors[type], emissiveIntensity: 0.3
     });
     const mesh = new THREE.Mesh(geo, mat);
-    mesh.position.set(x, 0.5, z);
+    const gy = terrainHeight(x, z);
+    mesh.position.set(x, gy + 0.5, z);
     scene.add(mesh);
-    pickups3d.push({ mesh, type, collected: false });
+    pickups3d.push({ mesh, type, collected: false, baseY: gy + 0.5 });
   }
 }
 
@@ -464,7 +472,7 @@ class Enemy3D {
     const half = WORLD_SIZE / 2;
     this.x = Math.max(-half, Math.min(half, this.x));
     this.z = Math.max(-half, Math.min(half, this.z));
-    this.group.position.set(this.x, 0, this.z);
+    this.group.position.set(this.x, terrainHeight(this.x, this.z), this.z);
     this._bar.lookAt(camera.position);
   }
 
@@ -886,7 +894,7 @@ function _tickGlide(dt) {
   const spd = gliderOpen ? 20 : 5;
   camPos.x += dx * spd * dt;
   camPos.z += dz * spd * dt;
-  camPos.y  = playerAlt + EYE_H;
+  camPos.y  = terrainHeight(camPos.x, camPos.z) + playerAlt + EYE_H;
 
   const half = WORLD_SIZE / 2;
   camPos.x = Math.max(-half, Math.min(half, camPos.x));
@@ -897,7 +905,7 @@ function _tickGlide(dt) {
   if (playerAlt <= 0) {
     playerAlt = 0; gliderOpen = false;
     gameState = 'playing';
-    camPos.y  = EYE_H; camGrounded = true;
+    camPos.y  = terrainHeight(camPos.x, camPos.z) + EYE_H; camGrounded = true;
     showGlideHUD(false);
     renderer.domElement.requestPointerLock();
 
@@ -933,10 +941,11 @@ function _tickMove(dt) {
   camPos.x += dx * PLAYER_SPEED * sprint * dt;
   camPos.z += dz * PLAYER_SPEED * sprint * dt;
 
+  const groundY = terrainHeight(camPos.x, camPos.z) + EYE_H;
   if (keys['Space'] && camGrounded) { camVY = 7; camGrounded = false; }
   camVY += GRAVITY * dt;
   camPos.y += camVY * dt;
-  if (camPos.y <= EYE_H) { camPos.y = EYE_H; camVY = 0; camGrounded = true; }
+  if (camPos.y <= groundY) { camPos.y = groundY; camVY = 0; camGrounded = true; }
 
   const half = WORLD_SIZE / 2;
   camPos.x = Math.max(-half, Math.min(half, camPos.x));
@@ -1107,7 +1116,7 @@ function _tickPickups() {
 function _tickPickupBob(dt) {
   const t = Date.now() * 0.0018;
   pickups3d.forEach((p, i) => {
-    if (!p.collected) p.mesh.position.y = 0.5 + Math.sin(t + i) * 0.2;
+    if (!p.collected) p.mesh.position.y = (p.baseY ?? 0.5) + Math.sin(t + i) * 0.2;
   });
 }
 
