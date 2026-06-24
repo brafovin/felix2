@@ -1,6 +1,9 @@
 // UI / screen management
 function showScreen(id) {
-  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.screen').forEach(s => {
+    s.classList.remove('active');
+    s.style.display = '';
+  });
   const el = document.getElementById(id);
   if (el) {
     el.style.display = 'flex';
