@@ -19,10 +19,13 @@ let yaw = 0, pitch = 0, pointerLocked = false;
 // ── Emotes / dances ───────────────────────────────────────────────────────────
 let emoteActive = false, emoteType = 0, emoteT = 0, emoteMenuOpen = false;
 
-// ── Control mode (pc | mobile) + touch state ───────────────────────────────────
+// ── Control mode (pc | laptop | mobile) + touch state ─────────────────────────
 let controlMode = 'pc';
 let touchMove = { x: 0, y: 0 };       // analog joystick vector (-1..1)
 let touchControlsReady = false;
+
+// ── Laptop drag-look state ─────────────────────────────────────────────────────
+let laptopRightDown = false, laptopLookLX = 0, laptopLookLY = 0;
 
 // ── Multiplayer ────────────────────────────────────────────────────────────────
 let mpMode = false;
@@ -147,7 +150,7 @@ function initThree() {
 
   raycaster = new THREE.Raycaster();
 
-  // Pointer lock (PC only)
+  // Pointer lock (PC mode only)
   renderer.domElement.addEventListener('click', () => {
     if (controlMode !== 'pc') return;
     if (gameState === 'playing' || gameState === 'bus' || gameState === 'gliding') renderer.domElement.requestPointerLock();
@@ -157,6 +160,8 @@ function initThree() {
     const msg = document.getElementById('pointer-lock-msg');
     if (msg) msg.style.display = (controlMode === 'pc' && !pointerLocked && gameState === 'playing') ? 'flex' : 'none';
   });
+  // Laptop: show cursor hint
+  renderer.domElement.style.cursor = 'crosshair';
 
   window.addEventListener('resize', () => {
     camera.aspect = weaponCamera.aspect = innerWidth / innerHeight;
@@ -1186,6 +1191,8 @@ function startGame(opts) {
 
   const msg = document.getElementById('pointer-lock-msg');
   if (msg) msg.style.display = 'none';
+  const lhint = document.getElementById('laptop-hint');
+  if (lhint) lhint.style.display = (controlMode === 'laptop') ? 'block' : 'none';
 
   if (animFrame) cancelAnimationFrame(animFrame);
   let lastT = performance.now();
@@ -1224,27 +1231,46 @@ const _kd = e => {
 };
 const _ku = e => { keys[e.code] = false; };
 const _mm = e => {
+  if (controlMode === 'laptop') {
+    if (!laptopRightDown) return;
+    yaw   -= (e.clientX - laptopLookLX) * 0.004;
+    pitch -= (e.clientY - laptopLookLY) * 0.004;
+    pitch  = Math.max(-1.45, Math.min(1.45, pitch));
+    laptopLookLX = e.clientX; laptopLookLY = e.clientY;
+    return;
+  }
   if (!pointerLocked) return;
   yaw   -= e.movementX * 0.0017;
   pitch -= e.movementY * 0.0017;
   pitch  = Math.max(-1.45, Math.min(1.45, pitch));
 };
-const _md = e => { if (e.button === 0) shooting = true;  };
-const _mu = e => { if (e.button === 0) shooting = false; };
+const _md = e => {
+  if (e.button === 0) shooting = true;
+  if (e.button === 2 && controlMode === 'laptop') {
+    laptopRightDown = true; laptopLookLX = e.clientX; laptopLookLY = e.clientY;
+  }
+};
+const _mu = e => {
+  if (e.button === 0) shooting = false;
+  if (e.button === 2) laptopRightDown = false;
+};
+const _cx = e => { if (controlMode === 'laptop') e.preventDefault(); };
 
 function setupInput3d() {
-  document.addEventListener('keydown', _kd);
-  document.addEventListener('keyup',   _ku);
-  document.addEventListener('mousemove',_mm);
-  document.addEventListener('mousedown',_md);
-  document.addEventListener('mouseup',  _mu);
+  document.addEventListener('keydown',     _kd);
+  document.addEventListener('keyup',       _ku);
+  document.addEventListener('mousemove',   _mm);
+  document.addEventListener('mousedown',   _md);
+  document.addEventListener('mouseup',     _mu);
+  document.addEventListener('contextmenu', _cx);
 }
 function teardownInput3d() {
-  document.removeEventListener('keydown', _kd);
-  document.removeEventListener('keyup',   _ku);
-  document.removeEventListener('mousemove',_mm);
-  document.removeEventListener('mousedown',_md);
-  document.removeEventListener('mouseup',  _mu);
+  document.removeEventListener('keydown',     _kd);
+  document.removeEventListener('keyup',       _ku);
+  document.removeEventListener('mousemove',   _mm);
+  document.removeEventListener('mousedown',   _md);
+  document.removeEventListener('mouseup',     _mu);
+  document.removeEventListener('contextmenu', _cx);
   if (document.pointerLockElement) document.exitPointerLock();
 }
 
@@ -1258,7 +1284,7 @@ function isLikelyMobile() {
 }
 
 function selectControlMode(mode) {
-  controlMode = (mode === 'mobile') ? 'mobile' : 'pc';
+  controlMode = (mode === 'mobile') ? 'mobile' : (mode === 'laptop') ? 'laptop' : 'pc';
   try { localStorage.setItem('fortclash_control', controlMode); } catch {}
   document.body.classList.toggle('mobile-mode', controlMode === 'mobile');
   if (controlMode === 'mobile') setupTouchControls();
@@ -1466,7 +1492,7 @@ function _tickGlide(dt) {
     if (controlMode === 'pc') renderer.domElement.requestPointerLock();
 
     const msg = document.getElementById('pointer-lock-msg');
-    if (msg) msg.style.display = controlMode === 'pc' ? 'flex' : 'none';
+    if (msg) msg.style.display = (controlMode === 'pc') ? 'flex' : 'none';
 
     enemies3d.forEach(e => {
       if (!e.activated) {
@@ -1509,7 +1535,8 @@ function _tickMove(dt) {
 
   // Building AABB collision
   const PR = 0.45;
-  buildingBoxes.forEach(b => {
+  for (let bi = 0; bi < buildingBoxes.length; bi++) {
+    const b = buildingBoxes[bi];
     const ox = camPos.x - b.x, oz = camPos.z - b.z;
     if (Math.abs(ox) < b.hw + PR && Math.abs(oz) < b.hd + PR) {
       const px = b.hw + PR - Math.abs(ox);
@@ -1517,7 +1544,7 @@ function _tickMove(dt) {
       if (px < pz) camPos.x += Math.sign(ox) * px;
       else         camPos.z += Math.sign(oz) * pz;
     }
-  });
+  }
 
   const groundY = terrainHeight(camPos.x, camPos.z) + EYE_H;
   if (keys['Space'] && camGrounded) { camVY = 7; camGrounded = false; }
@@ -1763,6 +1790,7 @@ function _tickPickupBob(dt) {
 
 function _tickDoors(dt) {
   doors.forEach(d => {
+    if (!d.pivot) return;
     const target = d.open ? -Math.PI / 2 : 0;
     d.pivot.rotation.y += (target - d.pivot.rotation.y) * Math.min(1, dt * 7);
   });
@@ -1793,24 +1821,19 @@ function _toggleEmoteMenu(show) {
 }
 
 function _tickEmote(dt) {
-  if (!emoteActive) return;
+  if (!emoteActive || !camera || !camPos) return;
   emoteT += dt;
   const dur = EMOTES[emoteType].dur;
   const t = emoteT / dur;
 
-  // Camera-based dance animations (first-person view)
   if (emoteType === 0) {
-    // Wave: tilt camera side to side
     camera.rotation.z = Math.sin(emoteT * 6) * 0.25 * Math.max(0, 1 - t * 0.6);
   } else if (emoteType === 1) {
-    // Celebrate: bounce up
     camPos.y += Math.abs(Math.sin(emoteT * 8)) * 0.012;
     camera.rotation.z = Math.sin(emoteT * 4) * 0.12;
   } else if (emoteType === 2) {
-    // Spin: full 360
     yaw += dt * (Math.PI * 2 / dur);
   } else if (emoteType === 3) {
-    // Dance: rhythmic sway + bob
     camera.rotation.z = Math.sin(emoteT * 5) * 0.18;
     camPos.y += Math.sin(emoteT * 10) * 0.008;
   }
@@ -2127,6 +2150,7 @@ function endGame3d(won) {
   teardownInput3d();
   showMobileControls(false);
   showBusHUD(false); showGlideHUD(false);
+  const _lh = document.getElementById('laptop-hint'); if (_lh) _lh.style.display = 'none';
   if (mpMode && window.NET && NET.active) { NET.tick(0); if (!won) NET.leave(); }
 
   const elapsed = (Date.now() - startTime) / 1000;

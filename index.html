@@ -20,7 +20,12 @@
       <button class="control-card" onclick="selectControlMode('pc')">
         <div class="control-icon">🖥️</div>
         <div class="control-title">PC</div>
-        <div class="control-desc">Tastatur + Maus</div>
+        <div class="control-desc">Tastatur + Maus (Pointer Lock)</div>
+      </button>
+      <button class="control-card" onclick="selectControlMode('laptop')">
+        <div class="control-icon">💻</div>
+        <div class="control-title">LAPTOP</div>
+        <div class="control-desc">Tastatur + Touchpad / Maus ziehen</div>
       </button>
       <button class="control-card" onclick="selectControlMode('mobile')">
         <div class="control-icon">📱</div>
@@ -189,6 +194,9 @@
   <div id="pointer-lock-msg" style="display:none;">
     <div>🎮 KLICKEN ZUM SPIELEN</div>
     <div style="font-size:13px;opacity:0.6;margin-top:6px">Maus klicken zum Aktivieren</div>
+  </div>
+  <div id="laptop-hint" style="display:none;position:absolute;bottom:12px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.55);border-radius:6px;padding:6px 16px;font-size:12px;letter-spacing:1px;pointer-events:none;">
+    🖱️ RECHTSKLICK + ZIEHEN zum Umsehen &nbsp;|&nbsp; LINKSKLICK zum Schießen &nbsp;|&nbsp; WASD zum Laufen
   </div>
 
   <!-- WEAPON SLOTS (built dynamically from looted weapons) -->
