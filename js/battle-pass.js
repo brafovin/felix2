@@ -35,26 +35,45 @@ const BP_REWARDS = [
   { tier: 30, type: 'pickaxe',  name: 'Regenbogen-Sense', icon: '🌈', pickId: 'rainbow_scythe' }
 ];
 
+// All unlockable IDs — owner gets everything on first launch
+const ALL_SKINS     = ['default','shadow_ops','aurora','blaze','arctic','camo','neon','golden'];
+const ALL_PICKAXES  = ['default_pick','thunder_pick','shadow_blade','rainbow_scythe'];
+const ALL_GLIDERS   = ['default_glider','storm_wing','nebula'];
+
 // Persistent save data
 function loadSaveData() {
   const defaults = {
-    level: 1,
+    level: BP_MAX_TIERS,
     xp: 0,
     totalXp: 0,
     bpOwned: true,
-    unlockedTiers: [],
+    unlockedTiers: Array.from({length: BP_MAX_TIERS}, (_, i) => i + 1),
     wins: 0,
     kills: 0,
     selectedSkin: 'default',
     selectedPickaxe: 'default_pick',
     selectedGlider: 'default_glider',
-    unlockedSkins: ['default'],
-    unlockedPickaxes: ['default_pick'],
-    unlockedGliders: ['default_glider']
+    unlockedSkins:    ALL_SKINS,
+    unlockedPickaxes: ALL_PICKAXES,
+    unlockedGliders:  ALL_GLIDERS,
+    ownerUnlocked: true
   };
   try {
     const saved = localStorage.getItem('fortclash_save');
-    return saved ? { ...defaults, ...JSON.parse(saved) } : defaults;
+    if (!saved) return defaults;
+    const data = { ...defaults, ...JSON.parse(saved) };
+    // Always ensure owner has all items (non-destructive upgrade)
+    if (!data.ownerUnlocked) {
+      data.level            = BP_MAX_TIERS;
+      data.bpOwned          = true;
+      data.unlockedTiers    = Array.from({length: BP_MAX_TIERS}, (_, i) => i + 1);
+      data.unlockedSkins    = ALL_SKINS;
+      data.unlockedPickaxes = ALL_PICKAXES;
+      data.unlockedGliders  = ALL_GLIDERS;
+      data.ownerUnlocked    = true;
+      localStorage.setItem('fortclash_save', JSON.stringify(data));
+    }
+    return data;
   } catch { return defaults; }
 }
 

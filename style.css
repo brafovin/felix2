@@ -858,6 +858,17 @@ body {
   width: 200px;
 }
 
+/* ─── BUS / GLIDING PHASE ─── */
+#hud {
+  transition: opacity 0.3s;
+}
+
+#crosshair {
+  transition: opacity 0.3s;
+}
+
+/* Hide crosshair during bus/glide via JS opacity on hud — crosshair is separate */
+
 /* Scrollbar for BP */
 .bp-tiers-scroll::-webkit-scrollbar { height: 6px; }
 .bp-tiers-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
