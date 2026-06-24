@@ -498,50 +498,79 @@ function buildWeaponMesh() {
   if (weaponGroup) weaponScene.remove(weaponGroup);
   weaponGroup = new THREE.Group();
 
-  const w   = GUNS[wIdx];
-  const bc  = w.name === 'Scharfschütze' ? 0x3a2a1a : 0x14141e;
-  const bm  = c => new THREE.MeshLambertMaterial({ color: c });
+  const w  = GUNS[wIdx];
+  // Use MeshBasicMaterial so color shows regardless of lighting
+  const bm = c => new THREE.MeshBasicMaterial({ color: c });
 
-  // Main body
-  const body = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.092, 0.46), bm(bc));
+  const isSniper  = w.id === 'sniper';
+  const isShotgun = w.id === 'shotgun';
+  const isLaser   = w.id === 'laser';
+  const isPistol  = w.id === 'pistol' || w.id === 'deagle';
+
+  // Rarity-tinted body color
+  const rarityTint = { common:0x888888, uncommon:0x5a8a5a, rare:0x3a5a8a, epic:0x7a3a8a, legendary:0xb8860b };
+  const bodyCol    = rarityTint[w.rarity] || 0x666666;
+
+  // Main body — visibly sized
+  const bodyLen = isSniper ? 0.60 : (isPistol ? 0.34 : 0.50);
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.11, bodyLen), bm(bodyCol));
   weaponGroup.add(body);
 
   // Barrel
-  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.022, 0.3, 8), bm(0x1a1a28));
+  const barLen = isSniper ? 0.40 : (isPistol ? 0.18 : 0.28);
+  const bar = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.026, barLen, 8), bm(0x444455));
   bar.rotation.x = Math.PI / 2;
-  bar.position.set(0, 0.01, -0.34);
+  bar.position.set(0, 0.012, -(bodyLen * 0.5 + barLen * 0.5));
   weaponGroup.add(bar);
 
+  // Barrel tip flash guard
+  const tip = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.026, 0.045, 6), bm(0x333344));
+  tip.rotation.x = Math.PI / 2;
+  tip.position.set(0, 0.012, -(bodyLen * 0.5 + barLen + 0.022));
+  weaponGroup.add(tip);
+
   // Grip
-  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.1, 0.065), bm(0x3a2a18));
-  grip.position.set(0.008, -0.09, 0.06);
-  grip.rotation.x = 0.22;
+  const grip = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.13, 0.075), bm(0x5a3a1a));
+  grip.position.set(0.01, -0.115, bodyLen * 0.15);
+  grip.rotation.x = 0.18;
   weaponGroup.add(grip);
 
   // Magazine
-  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.11, 0.06), bm(0x222222));
-  mag.position.set(0, -0.05, 0.02);
-  mag.rotation.x = 0.1;
+  const mag = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.13, 0.07), bm(0x555555));
+  mag.position.set(0, -0.065, bodyLen * 0.05);
+  mag.rotation.x = 0.08;
   weaponGroup.add(mag);
 
-  if (w.name === 'Schrotflinte') {
-    const pump = new THREE.Mesh(new THREE.BoxGeometry(0.062, 0.06, 0.15), bm(0x5a4a3a));
-    pump.position.set(0, -0.03, -0.2);
+  // Top rail / receiver highlight
+  const rail = new THREE.Mesh(new THREE.BoxGeometry(0.025, 0.025, bodyLen * 0.7), bm(0x999999));
+  rail.position.set(0, 0.072, 0);
+  weaponGroup.add(rail);
+
+  if (isShotgun) {
+    const pump = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.07, 0.18), bm(0x6a5a3a));
+    pump.position.set(0, -0.03, -(bodyLen * 0.2));
     weaponGroup.add(pump);
   }
 
-  if (w.name === 'Scharfschütze') {
-    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.024, 0.024, 0.22, 8), bm(0x111111));
+  if (isSniper) {
+    const scope = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.26, 8), bm(0x222233));
     scope.rotation.x = Math.PI / 2;
-    scope.position.set(0, 0.075, -0.05);
+    scope.position.set(0, 0.09, -0.04);
     weaponGroup.add(scope);
-    const scopeL = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.06, 8), bm(0x080808));
-    scopeL.rotation.x = Math.PI / 2;
-    scopeL.position.set(0, 0.075, -0.18);
-    weaponGroup.add(scopeL);
+    const lensL = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.020, 0.022, 8), bm(0x334466));
+    lensL.rotation.x = Math.PI / 2;
+    lensL.position.set(0, 0.09, -0.175);
+    weaponGroup.add(lensL);
   }
 
-  weaponGroup.position.set(0.27, -0.22, -0.46);
+  if (isLaser) {
+    const emitter = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.04, 0.06), bm(0x00ccff));
+    emitter.position.set(0, 0.06, -(bodyLen * 0.5 + 0.03));
+    weaponGroup.add(emitter);
+  }
+
+  // Position: right of center, below horizon, clearly in front
+  weaponGroup.position.set(0.21, -0.26, -0.42);
   weaponScene.add(weaponGroup);
 }
 
@@ -921,8 +950,8 @@ function _tickMove(dt) {
   // Weapon bob
   if (moving && weaponGroup) {
     weaponBobT += dt * (sprint > 1 ? 14 : 9);
-    weaponGroup.position.y = -0.22 + Math.sin(weaponBobT) * 0.013;
-    weaponGroup.position.x = 0.27 + Math.cos(weaponBobT * 0.5) * 0.007;
+    weaponGroup.position.y = -0.26 + Math.sin(weaponBobT) * 0.013;
+    weaponGroup.position.x = 0.21 + Math.cos(weaponBobT * 0.5) * 0.007;
   }
 }
 
@@ -954,10 +983,8 @@ function _fire() {
   // Muzzle flash light
   if (muzzleLight) scene.remove(muzzleLight);
   muzzleLight = new THREE.PointLight(0xffee88, 4, 6);
-  const wPos = new THREE.Vector3();
-  if (weaponGroup) { weaponGroup.getWorldPosition(wPos); wPos.z -= 0.35; }
-  else wPos.copy(camPos);
-  muzzleLight.position.copy(wPos);
+  const muzzlePos = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation).multiplyScalar(1.5).add(camPos);
+  muzzleLight.position.copy(muzzlePos);
   scene.add(muzzleLight);
   setTimeout(() => { if (muzzleLight) scene.remove(muzzleLight); muzzleLight = null; }, 55);
 
