@@ -22,15 +22,12 @@ let playerHP = 100, playerShield = 0, playerAlive = true, playerKills = 0;
 const PLAYER_SPEED = 9, EYE_H = 1.75, GRAVITY = -24;
 const SPRINT_MULT  = 1.65;
 
-// ── Weapons ───────────────────────────────────────────────────────────────────
-const GUNS = [
-  { name:'Sturmgewehr',   icon:'🔫', dmg:22, rate:0.11, maxAmmo:30, maxRes:90, spread:0.024, range:500, crit:0.10 },
-  { name:'Schrotflinte',  icon:'🔫', dmg:13, rate:0.65, maxAmmo:6,  maxRes:30, spread:0.13,  range:75,  crit:0.05, pellets:8 },
-  { name:'Scharfschütze', icon:'🔭', dmg:90, rate:1.6,  maxAmmo:5,  maxRes:20, spread:0.001, range:1200,crit:0.40 },
-];
+// ── Weapons (looted from chests — player starts empty) ─────────────────────────
+let GUNS = [];          // current inventory (filled by looting chests)
+const MAX_SLOTS = 5;
 let wIdx = 0;
-let wAmmo    = [30, 6, 5];
-let wReserve = [90, 30, 20];
+let wAmmo    = [];
+let wReserve = [];
 let reloading = false, reloadTimer = 0, fireCooldown = 0;
 let weaponBobT = 0, weaponSwayX = 0, weaponSwayY = 0;
 let muzzleLight = null;
@@ -62,6 +59,9 @@ let enemies3d = [];
 
 // ── Pickups ───────────────────────────────────────────────────────────────────
 let pickups3d = [];
+
+// ── Chests (weapon loot) ──────────────────────────────────────────────────────
+let chests3d = [];
 
 // ── Bullets (enemy projectiles for visual) ────────────────────────────────────
 let eBullets = [];
@@ -327,6 +327,141 @@ function spawnPickups3d() {
 }
 
 // =============================================================================
+//  CHESTS (weapon loot)
+// =============================================================================
+
+function makeChestMesh() {
+  const grp = new THREE.Group();
+  const goldMat = new THREE.MeshLambertMaterial({ color: 0xd4a017, emissive: 0x5a3a00, emissiveIntensity: 0.4 });
+  const woodMat = new THREE.MeshLambertMaterial({ color: 0x6a4a2a });
+
+  // Base
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.7, 0.8), woodMat);
+  base.position.y = 0.35;
+  base.castShadow = true;
+  grp.add(base);
+
+  // Gold trim
+  const trim = new THREE.Mesh(new THREE.BoxGeometry(1.16, 0.12, 0.86), goldMat);
+  trim.position.y = 0.4;
+  grp.add(trim);
+
+  // Lid (pivots so it can swing open)
+  const lidPivot = new THREE.Group();
+  lidPivot.position.set(0, 0.7, -0.4);
+  const lid = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.35, 0.8), goldMat);
+  lid.position.set(0, 0.12, 0.4);
+  lid.castShadow = true;
+  lidPivot.add(lid);
+  grp.add(lidPivot);
+
+  // Glow beam so chests are easy to spot
+  const glow = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.5, 0.5, 14, 8, 1, true),
+    new THREE.MeshBasicMaterial({ color: 0xffd54a, transparent: true, opacity: 0.18, side: THREE.DoubleSide })
+  );
+  glow.position.y = 7;
+  grp.add(glow);
+
+  grp.userData = { lidPivot, glow };
+  return grp;
+}
+
+function spawnChests3d() {
+  chests3d.forEach(c => scene.remove(c.group));
+  chests3d = [];
+  const rng = seededRng(123);
+  for (let i = 0; i < 55; i++) {
+    const x = (rng() - 0.5) * WORLD_SIZE * 0.9;
+    const z = (rng() - 0.5) * WORLD_SIZE * 0.9;
+    const grp = makeChestMesh();
+    grp.position.set(x, terrainHeight(x, z), z);
+    scene.add(grp);
+    chests3d.push({ group: grp, x, z, opened: false });
+  }
+}
+
+function _tickChests(dt) {
+  let near = null;
+  for (const c of chests3d) {
+    if (c.opened) {
+      // animate lid swinging open
+      const lp = c.group.userData.lidPivot;
+      if (lp && lp.rotation.x > -2.1) lp.rotation.x -= dt * 4;
+      continue;
+    }
+    if (!near && Math.hypot(c.x - camPos.x, c.z - camPos.z) < 2.6) near = c;
+  }
+  if (near) lootChest(near);
+
+  // pulse glow beams
+  const op = 0.12 + 0.10 * Math.sin(Date.now() * 0.004);
+  chests3d.forEach(c => {
+    const g = c.group.userData.glow;
+    if (g) { g.visible = !c.opened; if (!c.opened) g.material.opacity = op; }
+  });
+}
+
+// Rarity-weighted random weapon
+function _randomGun() {
+  const weights = { common: 30, uncommon: 26, rare: 18, epic: 10, legendary: 5 };
+  const pool = [];
+  ALL_GUNS.forEach((g, idx) => {
+    const w = weights[g.rarity] || 10;
+    for (let k = 0; k < w; k++) pool.push(idx);
+  });
+  return ALL_GUNS[pool[Math.floor(Math.random() * pool.length)]];
+}
+
+function lootChest(chest) {
+  chest.opened = true;
+  if (chest.group.userData.glow) chest.group.userData.glow.visible = false;
+
+  const gun = _randomGun();
+  const existing = GUNS.findIndex(g => g.id === gun.id);
+
+  if (existing >= 0) {
+    // already owned — refill ammo
+    wAmmo[existing]    = gun.maxAmmo;
+    wReserve[existing] = gun.maxRes;
+    showXPNotif(`${gun.icon} ${gun.name} aufgefüllt`);
+  } else if (GUNS.length < MAX_SLOTS) {
+    GUNS.push(gun);
+    wAmmo.push(gun.maxAmmo);
+    wReserve.push(gun.maxRes);
+    showXPNotif(`${gun.icon} ${gun.name} erhalten!`);
+    if (GUNS.length === 1) { wIdx = 0; buildWeaponMesh(); }
+    renderWeaponSlots();
+  } else {
+    // inventory full — bonus ammo
+    wReserve = wReserve.map(r => Math.min(999, r + 30));
+    showXPNotif('Inventar voll — +30 Munition');
+  }
+}
+
+// Rebuild the weapon-slots HUD from the current inventory
+function renderWeaponSlots() {
+  const cont = document.getElementById('weapon-slots');
+  if (!cont) return;
+  cont.innerHTML = '';
+  if (GUNS.length === 0) {
+    const d = document.createElement('div');
+    d.className = 'wslot empty';
+    d.textContent = 'Keine Waffe — Truhe suchen';
+    cont.appendChild(d);
+    return;
+  }
+  GUNS.forEach((g, i) => {
+    const d = document.createElement('div');
+    d.className = `wslot${i === wIdx ? ' active' : ''}`;
+    d.id = `wslot-${i}`;
+    d.textContent = `${i + 1} · ${g.icon}`;
+    d.onclick = () => switchGun(i);
+    cont.appendChild(d);
+  });
+}
+
+// =============================================================================
 //  ENEMY CLASS
 // =============================================================================
 
@@ -503,10 +638,11 @@ function spawnEnemies3d() {
 // =============================================================================
 
 function buildWeaponMesh() {
-  if (weaponGroup) weaponScene.remove(weaponGroup);
+  if (weaponGroup) { weaponScene.remove(weaponGroup); weaponGroup = null; }
+  const w  = GUNS[wIdx];
+  if (!w) return;   // no weapon in hand
   weaponGroup = new THREE.Group();
 
-  const w  = GUNS[wIdx];
   // Use MeshBasicMaterial so color shows regardless of lighting
   const bm = c => new THREE.MeshBasicMaterial({ color: c });
 
@@ -694,14 +830,18 @@ function startGame() {
 
   buildWorld();
   spawnPickups3d();
+  spawnChests3d();
   spawnEnemies3d();
 
   camPos = new THREE.Vector3(0, EYE_H, 0);
   camVY = 0; camGrounded = true;
   playerHP = 100; playerShield = 0; playerAlive = true; playerKills = 0;
   yaw = 0; pitch = 0; weaponBobT = 0;
-  wIdx = 0; wAmmo = [30, 6, 5]; wReserve = [90, 30, 20];
+  // Spawn with NO weapons — must loot chests
+  GUNS = []; wIdx = 0; wAmmo = []; wReserve = [];
   reloading = false; fireCooldown = 0;
+  if (weaponGroup) { weaponScene.remove(weaponGroup); weaponGroup = null; }
+  renderWeaponSlots();
 
   // Bus path
   const pathLen = WORLD_SIZE + 800;
@@ -741,7 +881,6 @@ function startGame() {
   keys = {}; shooting = false;
 
   buildBusMesh();
-  buildWeaponMesh();
 
   // Camera attaches to bus
   camPos.set(bus.x, 80, bus.z);
@@ -777,6 +916,8 @@ const _kd = e => {
   if (e.code === 'Digit1') switchGun(0);
   if (e.code === 'Digit2') switchGun(1);
   if (e.code === 'Digit3') switchGun(2);
+  if (e.code === 'Digit4') switchGun(3);
+  if (e.code === 'Digit5') switchGun(4);
   if (e.code === 'KeyF'   && gameState === 'playing') { /* medkit shortcut */ }
 };
 const _ku = e => { keys[e.code] = false; };
@@ -822,6 +963,7 @@ function tick3d(dt) {
     _tickEnemies(dt);
     _tickEBullets(dt);
     _tickPickups();
+    _tickChests(dt);
     _tickBotFights(dt);
     tickFX(dt);
     _tickPickupBob(dt);
@@ -968,6 +1110,7 @@ function _tickMove(dt) {
 
 function _tickWeapon(dt) {
   fireCooldown -= dt;
+  if (GUNS.length === 0) return;   // no weapon yet — loot a chest
   if (reloading) {
     reloadTimer -= dt;
     if (reloadTimer <= 0) {
@@ -1053,15 +1196,17 @@ function _showDmgNum(worldPos, dmg, crit) {
 }
 
 function startReload3d() {
+  if (!GUNS[wIdx]) return;
   if (reloading || wReserve[wIdx] === 0 || wAmmo[wIdx] === GUNS[wIdx].maxAmmo) return;
   reloading = true; reloadTimer = 1.9;
   showXPNotif('Nachladen...');
 }
 
 function switchGun(idx) {
-  if (idx === wIdx) return;
+  if (idx === wIdx || idx < 0 || idx >= GUNS.length) return;
   wIdx = idx; reloading = false; fireCooldown = 0;
   buildWeaponMesh();
+  renderWeaponSlots();
 }
 
 // ─── ENEMY BULLETS ───────────────────────────────────────────────────────────
@@ -1211,15 +1356,16 @@ function updateHUD3d() {
   if (el('health-value')) el('health-value').textContent  = Math.ceil(Math.max(0, playerHP));
   if (el('shield-bar'))   el('shield-bar').style.width    = `${playerShield}%`;
   if (el('shield-value')) el('shield-value').textContent  = Math.ceil(playerShield);
-  if (el('ammo-current')) el('ammo-current').textContent  = reloading ? 'LADEN...' : wAmmo[wIdx];
-  if (el('ammo-reserve')) el('ammo-reserve').textContent  = wReserve[wIdx];
+  const g = GUNS[wIdx];
+  if (el('ammo-current')) el('ammo-current').textContent  = g ? (reloading ? 'LADEN...' : wAmmo[wIdx]) : '–';
+  if (el('ammo-reserve')) el('ammo-reserve').textContent  = g ? wReserve[wIdx] : '–';
   if (el('kill-count'))   el('kill-count').textContent    = playerKills;
   if (el('player-count')) el('player-count').textContent  = enemies3d.filter(e=>e.alive).length + (playerAlive?1:0);
-  if (el('weapon-name'))  el('weapon-name').textContent   = GUNS[wIdx].name;
-  if (el('weapon-icon'))  el('weapon-icon').textContent   = GUNS[wIdx].icon;
+  if (el('weapon-name'))  el('weapon-name').textContent   = g ? g.name : 'Keine Waffe';
+  if (el('weapon-icon'))  el('weapon-icon').textContent   = g ? g.icon : '✋';
 
   // Weapon slot highlight
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < GUNS.length; i++) {
     const s = el(`wslot-${i}`);
     if (s) s.className = `wslot${i === wIdx ? ' active' : ''}`;
   }
@@ -1249,6 +1395,13 @@ function _drawMinimap() {
     mc.fillStyle='#fbbf24'; mc.beginPath();
     mc.arc((bus.x+WORLD_SIZE/2)*sc,(bus.z+WORLD_SIZE/2)*sc,3,0,Math.PI*2); mc.fill();
   }
+
+  // Chests (unopened) — gold dots
+  mc.fillStyle='#ffd54a';
+  chests3d.forEach(c => {
+    if (c.opened) return;
+    mc.fillRect((c.x+WORLD_SIZE/2)*sc-1.5,(c.z+WORLD_SIZE/2)*sc-1.5,3,3);
+  });
 
   // Enemies
   mc.fillStyle='#ef4444';

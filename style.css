@@ -1025,10 +1025,15 @@ kbd {
   border-color: rgba(255,255,255,0.6);
   color: #fff;
 }
+.wslot.empty {
+  cursor: default;
+  color: rgba(255,215,74,0.85);
+  border-color: rgba(255,215,74,0.4);
+  font-weight: 600;
+}
 
 /* ─── GAME SCREEN CURSOR ─── */
 #game-screen { cursor: none; }
-}
 
 /* ─── WEAPON LOCKER ─── */
 .weapon-loadout-slots {
