@@ -42,39 +42,40 @@ const ALL_GLIDERS   = ['default_glider','storm_wing','nebula'];
 
 // Persistent save data
 function loadSaveData() {
-  const defaults = {
-    level: BP_MAX_TIERS,
-    xp: 0,
-    totalXp: 0,
-    bpOwned: true,
-    unlockedTiers: Array.from({length: BP_MAX_TIERS}, (_, i) => i + 1),
-    wins: 0,
-    kills: 0,
-    selectedSkin: 'default',
-    selectedPickaxe: 'default_pick',
-    selectedGlider: 'default_glider',
-    unlockedSkins:    ALL_SKINS,
-    unlockedPickaxes: ALL_PICKAXES,
-    unlockedGliders:  ALL_GLIDERS,
-    ownerUnlocked: true
-  };
+  // Preserve only player stats and selections — unlock data is always forced
+  let wins = 0, kills = 0;
+  let selectedSkin    = 'default';
+  let selectedPickaxe = 'default_pick';
+  let selectedGlider  = 'default_glider';
+
   try {
     const saved = localStorage.getItem('fortclash_save');
-    if (!saved) return defaults;
-    const data = { ...defaults, ...JSON.parse(saved) };
-    // Always ensure owner has all items (non-destructive upgrade)
-    if (!data.ownerUnlocked) {
-      data.level            = BP_MAX_TIERS;
-      data.bpOwned          = true;
-      data.unlockedTiers    = Array.from({length: BP_MAX_TIERS}, (_, i) => i + 1);
-      data.unlockedSkins    = ALL_SKINS;
-      data.unlockedPickaxes = ALL_PICKAXES;
-      data.unlockedGliders  = ALL_GLIDERS;
-      data.ownerUnlocked    = true;
-      localStorage.setItem('fortclash_save', JSON.stringify(data));
+    if (saved) {
+      const p = JSON.parse(saved);
+      wins            = p.wins            || 0;
+      kills           = p.kills           || 0;
+      selectedSkin    = p.selectedSkin    || 'default';
+      selectedPickaxe = p.selectedPickaxe || 'default_pick';
+      selectedGlider  = p.selectedGlider  || 'default_glider';
     }
-    return data;
-  } catch { return defaults; }
+  } catch {}
+
+  // Owner always has everything unlocked — no conditional, no old-data override
+  const data = {
+    wins, kills, selectedSkin, selectedPickaxe, selectedGlider,
+    level:            BP_MAX_TIERS,
+    xp:               0,
+    totalXp:          0,
+    bpOwned:          true,
+    ownerUnlocked:    true,
+    unlockedTiers:    Array.from({length: BP_MAX_TIERS}, (_, i) => i + 1),
+    unlockedSkins:    [...ALL_SKINS],
+    unlockedPickaxes: [...ALL_PICKAXES],
+    unlockedGliders:  [...ALL_GLIDERS],
+  };
+
+  try { localStorage.setItem('fortclash_save', JSON.stringify(data)); } catch {}
+  return data;
 }
 
 function saveSaveData(data) {
