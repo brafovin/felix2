@@ -176,10 +176,11 @@ function buildWorld() {
   ground.receiveShadow = true;
   mapGroup.add(ground);
 
-  // Road network + towns of houses
+  // Road network + towns of houses + downtown skyscrapers
   const rng = seededRng(42);
   addRoadGrid(mapGroup);
   addTowns(mapGroup, rng);
+  addTowers(mapGroup, rng);
 
   // Scattered nature + extra buildings
   for (let i = 0; i < 200; i++) {
@@ -338,6 +339,57 @@ function addBuilding(g, x, z, rng) {
   grp.position.set(x, terrainHeight(x, z), z);
   grp.userData = { solidHW: w / 2, solidHD: d / 2, h };
   g.add(grp);
+}
+
+// Tall high-rise tower with glass window bands
+function addTower(g, x, z, rng) {
+  const floors = 5 + Math.floor(rng() * 10);   // 5–14 storeys
+  const fh = 3.2;
+  const w = 8 + rng() * 6, d = 8 + rng() * 6, h = floors * fh;
+  const grp = new THREE.Group();
+
+  const shades = [0x6a7a8a, 0x7a6a5a, 0x5a6a7a, 0x8a8a90, 0x60707c];
+  const wallMat = new THREE.MeshLambertMaterial({ color: shades[Math.floor(rng() * shades.length)] });
+  const winMat  = new THREE.MeshLambertMaterial({ color: 0x9fd4f2, emissive: 0x203848, emissiveIntensity: 0.5 });
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0x33373d });
+
+  const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
+  body.position.y = h / 2; body.castShadow = true; body.receiveShadow = true;
+  grp.add(body);
+
+  const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.4, 0.6, d + 0.4), roofMat);
+  roof.position.y = h + 0.3; roof.castShadow = true; grp.add(roof);
+  const rooftop = new THREE.Mesh(new THREE.BoxGeometry(w * 0.3, 1.8, d * 0.3), roofMat);
+  rooftop.position.y = h + 1.2; grp.add(rooftop);
+
+  // Per-floor glass window bands on all four faces
+  for (let f = 0; f < floors; f++) {
+    const wy = f * fh + fh * 0.6;
+    const fb = new THREE.Mesh(new THREE.BoxGeometry(w * 0.82, 1.4, 0.1), winMat);
+    fb.position.set(0, wy, d / 2 + 0.06); grp.add(fb);
+    const fb2 = fb.clone(); fb2.position.z = -d / 2 - 0.06; grp.add(fb2);
+    const lr = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.4, d * 0.82), winMat);
+    lr.position.set(w / 2 + 0.06, wy, 0); grp.add(lr);
+    const lr2 = lr.clone(); lr2.position.x = -w / 2 - 0.06; grp.add(lr2);
+  }
+
+  grp.position.set(x, terrainHeight(x, z), z);
+  grp.userData = { solidHW: w / 2, solidHD: d / 2, h };
+  g.add(grp);
+}
+
+// A downtown of skyscrapers plus a few scattered ones
+function addTowers(g, rng) {
+  for (let i = 0; i < 11; i++) {
+    const x = (rng() - 0.5) * WORLD_SIZE * 0.34;
+    const z = (rng() - 0.5) * WORLD_SIZE * 0.34;
+    addTower(g, x, z, rng);
+  }
+  for (let i = 0; i < 7; i++) {
+    const x = (rng() - 0.5) * WORLD_SIZE * 0.85;
+    const z = (rng() - 0.5) * WORLD_SIZE * 0.85;
+    addTower(g, x, z, rng);
+  }
 }
 
 // =============================================================================
