@@ -3,7 +3,7 @@
            showScreen, addKillFeedEntry, showXPNotif, showLevelUpNotification,
            updateMenuStats, SKINS_DATA */
 
-const WORLD_SIZE  = 1400;
+const WORLD_SIZE  = 900;
 const INIT_BOTS   = 59;
 
 // ── Scene globals ─────────────────────────────────────────────────────────────
@@ -51,11 +51,11 @@ let sTX = 0, sTZ = 0, sTR = sCR;
 let sShrinking = false, sTimer = 60, sPhase = 0, sDmg = 2, sWarned = false;
 let stormWall = null;
 const S_PHASES = [
-  {wait:60, tr:560, dur:30, dmg:2 },
-  {wait:45, tr:330, dur:25, dmg:3 },
-  {wait:35, tr:190, dur:20, dmg:5 },
-  {wait:25, tr:95,  dur:15, dmg:8 },
-  {wait:20, tr:40,  dur:12, dmg:12},
+  {wait:60, tr:360, dur:30, dmg:2 },
+  {wait:45, tr:210, dur:25, dmg:3 },
+  {wait:35, tr:120, dur:20, dmg:5 },
+  {wait:25, tr:60,  dur:15, dmg:8 },
+  {wait:20, tr:25,  dur:12, dmg:12},
 ];
 
 // ── Enemies ───────────────────────────────────────────────────────────────────
