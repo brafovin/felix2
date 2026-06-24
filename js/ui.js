@@ -179,6 +179,6 @@ function showLevelUpNotification(level) {
 // ─── INIT ─────────────────────────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   syncUnlockState();
-  showScreen('main-menu');
+  showScreen('control-select');
   updateMenuStats();
 });

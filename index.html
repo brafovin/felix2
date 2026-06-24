@@ -9,8 +9,29 @@
 </head>
 <body>
 
+<!-- CONTROL SELECT (shown first) -->
+<div id="control-select" class="screen active">
+  <div class="menu-bg"></div>
+  <div class="menu-content">
+    <h1 class="game-title">FORT<span>CLASH</span></h1>
+    <p class="game-subtitle">WÄHLE DEINE STEUERUNG</p>
+    <div class="control-choice">
+      <button class="control-card" onclick="selectControlMode('pc')">
+        <div class="control-icon">🖥️</div>
+        <div class="control-title">PC</div>
+        <div class="control-desc">Tastatur + Maus</div>
+      </button>
+      <button class="control-card" onclick="selectControlMode('mobile')">
+        <div class="control-icon">📱</div>
+        <div class="control-title">HANDY</div>
+        <div class="control-desc">Touch-Steuerung</div>
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- MAIN MENU -->
-<div id="main-menu" class="screen active">
+<div id="main-menu" class="screen">
   <div class="menu-bg"></div>
   <div class="menu-content">
     <h1 class="game-title">FORT<span>CLASH</span></h1>
@@ -20,6 +41,7 @@
       <button class="btn btn-secondary" onclick="showScreen('battlepass')">BATTLE PASS</button>
       <button class="btn btn-secondary" onclick="showScreen('locker')">LOCKER</button>
       <button class="btn btn-secondary" onclick="openWeaponLocker()">WAFFEN</button>
+      <button class="btn btn-secondary" onclick="showScreen('control-select')">STEUERUNG</button>
     </div>
     <div class="menu-stats">
       <div class="stat"><span class="stat-label">SIEGE</span><span class="stat-value" id="menu-wins">0</span></div>
@@ -153,11 +175,16 @@
     <div style="font-size:13px;opacity:0.6;margin-top:6px">Maus klicken zum Aktivieren</div>
   </div>
 
-  <!-- WEAPON SLOTS (1/2/3) -->
-  <div id="weapon-slots">
-    <div class="wslot active" id="wslot-0" onclick="switchGun(0)">1 · 🔫</div>
-    <div class="wslot"        id="wslot-1" onclick="switchGun(1)">2 · 🔫</div>
-    <div class="wslot"        id="wslot-2" onclick="switchGun(2)">3 · 🔭</div>
+  <!-- WEAPON SLOTS (built dynamically from looted weapons) -->
+  <div id="weapon-slots"></div>
+
+  <!-- MOBILE TOUCH CONTROLS -->
+  <div id="mobile-controls" style="display:none;">
+    <div id="mob-look"></div>
+    <div id="mob-joystick"><div id="mob-stick"></div></div>
+    <div id="mob-fire" class="mob-btn">🔫</div>
+    <div id="mob-jump" class="mob-btn">⬆</div>
+    <div id="mob-reload" class="mob-btn">⟳</div>
   </div>
 
 </div>

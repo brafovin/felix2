@@ -16,6 +16,11 @@ let gameTime = 0, startTime = 0, animFrame = null;
 let keys = {}, shooting = false;
 let yaw = 0, pitch = 0, pointerLocked = false;
 
+// ── Control mode (pc | mobile) + touch state ───────────────────────────────────
+let controlMode = 'pc';
+let touchMove = { x: 0, y: 0 };       // analog joystick vector (-1..1)
+let touchControlsReady = false;
+
 // ── Player state ──────────────────────────────────────────────────────────────
 let camPos, camVY = 0, camGrounded = true;
 let playerHP = 100, playerShield = 0, playerAlive = true, playerKills = 0;
@@ -126,14 +131,15 @@ function initThree() {
 
   raycaster = new THREE.Raycaster();
 
-  // Pointer lock
+  // Pointer lock (PC only)
   renderer.domElement.addEventListener('click', () => {
+    if (controlMode !== 'pc') return;
     if (gameState === 'playing' || gameState === 'bus' || gameState === 'gliding') renderer.domElement.requestPointerLock();
   });
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === renderer.domElement;
     const msg = document.getElementById('pointer-lock-msg');
-    if (msg) msg.style.display = pointerLocked ? 'none' : (gameState === 'playing' ? 'flex' : 'none');
+    if (msg) msg.style.display = (controlMode === 'pc' && !pointerLocked && gameState === 'playing') ? 'flex' : 'none';
   });
 
   window.addEventListener('resize', () => {
@@ -941,6 +947,8 @@ function startGame() {
   pitch = -0.22;
 
   setupInput3d();
+  if (controlMode === 'mobile') { setupTouchControls(); showMobileControls(true); }
+  else showMobileControls(false);
   showBusHUD(true);
 
   const msg = document.getElementById('pointer-lock-msg');
@@ -997,6 +1005,112 @@ function teardownInput3d() {
   document.removeEventListener('mousedown',_md);
   document.removeEventListener('mouseup',  _mu);
   if (document.pointerLockElement) document.exitPointerLock();
+}
+
+// =============================================================================
+//  CONTROL MODE (PC / Mobile) + TOUCH CONTROLS
+// =============================================================================
+
+function isLikelyMobile() {
+  return /Mobi|Android|iPhone|iPad|iPod|Touch/i.test(navigator.userAgent) ||
+         (navigator.maxTouchPoints > 1);
+}
+
+function selectControlMode(mode) {
+  controlMode = (mode === 'mobile') ? 'mobile' : 'pc';
+  try { localStorage.setItem('fortclash_control', controlMode); } catch {}
+  document.body.classList.toggle('mobile-mode', controlMode === 'mobile');
+  if (controlMode === 'mobile') setupTouchControls();
+  showScreen('main-menu');
+}
+
+function showMobileControls(v) {
+  const el = document.getElementById('mobile-controls');
+  if (el) el.style.display = (v && controlMode === 'mobile') ? 'block' : 'none';
+}
+
+function setupTouchControls() {
+  if (touchControlsReady) return;
+  const joy    = document.getElementById('mob-joystick');
+  const stick  = document.getElementById('mob-stick');
+  const look   = document.getElementById('mob-look');
+  const fire   = document.getElementById('mob-fire');
+  const jump   = document.getElementById('mob-jump');
+  const reload = document.getElementById('mob-reload');
+  if (!joy || !look) return;
+  touchControlsReady = true;
+
+  // ── Left joystick (movement) ──
+  let joyId = null, joyCx = 0, joyCy = 0;
+  const joyR = 55;
+  joy.addEventListener('touchstart', e => {
+    const t = e.changedTouches[0];
+    joyId = t.identifier;
+    const r = joy.getBoundingClientRect();
+    joyCx = r.left + r.width / 2; joyCy = r.top + r.height / 2;
+    e.preventDefault();
+  }, { passive: false });
+  joy.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== joyId) continue;
+      const dx = t.clientX - joyCx, dy = t.clientY - joyCy;
+      const d = Math.hypot(dx, dy), cl = Math.min(d, joyR);
+      const ang = Math.atan2(dy, dx);
+      const kx = Math.cos(ang) * cl, ky = Math.sin(ang) * cl;
+      touchMove.x = kx / joyR; touchMove.y = ky / joyR;
+      if (stick) stick.style.transform = `translate(${kx}px,${ky}px)`;
+    }
+    e.preventDefault();
+  }, { passive: false });
+  const joyEnd = e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === joyId) {
+        joyId = null; touchMove.x = 0; touchMove.y = 0;
+        if (stick) stick.style.transform = '';
+      }
+    }
+  };
+  joy.addEventListener('touchend', joyEnd);
+  joy.addEventListener('touchcancel', joyEnd);
+
+  // ── Right look zone ──
+  let lookId = null, lookX = 0, lookY = 0;
+  look.addEventListener('touchstart', e => {
+    const t = e.changedTouches[0];
+    lookId = t.identifier; lookX = t.clientX; lookY = t.clientY;
+    e.preventDefault();
+  }, { passive: false });
+  look.addEventListener('touchmove', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier !== lookId) continue;
+      yaw   -= (t.clientX - lookX) * 0.005;
+      pitch -= (t.clientY - lookY) * 0.005;
+      pitch  = Math.max(-1.45, Math.min(1.45, pitch));
+      lookX = t.clientX; lookY = t.clientY;
+    }
+    e.preventDefault();
+  }, { passive: false });
+  const lookEnd = e => {
+    for (const t of e.changedTouches) if (t.identifier === lookId) lookId = null;
+  };
+  look.addEventListener('touchend', lookEnd);
+  look.addEventListener('touchcancel', lookEnd);
+
+  // ── Action buttons ──
+  if (fire) {
+    fire.addEventListener('touchstart', e => { shooting = true;  e.preventDefault(); }, { passive: false });
+    fire.addEventListener('touchend',   e => { shooting = false; e.preventDefault(); }, { passive: false });
+  }
+  if (jump) {
+    jump.addEventListener('touchstart', e => {
+      if (gameState === 'bus') _jumpBus();
+      else { keys['Space'] = true; setTimeout(() => keys['Space'] = false, 140); }
+      e.preventDefault();
+    }, { passive: false });
+  }
+  if (reload) {
+    reload.addEventListener('touchstart', e => { startReload3d(); e.preventDefault(); }, { passive: false });
+  }
 }
 
 // =============================================================================
@@ -1086,6 +1200,10 @@ function _tickGlide(dt) {
   if (keys['KeyS'] || keys['ArrowDown'])  { dx -= fwd.x;   dz -= fwd.z; }
   if (keys['KeyA'] || keys['ArrowLeft'])  { dx -= right.x; dz -= right.z; }
   if (keys['KeyD'] || keys['ArrowRight']) { dx += right.x; dz += right.z; }
+  if (controlMode === 'mobile' && (touchMove.x || touchMove.y)) {
+    dx += fwd.x * (-touchMove.y) + right.x * touchMove.x;
+    dz += fwd.z * (-touchMove.y) + right.z * touchMove.x;
+  }
   const spd = gliderOpen ? 20 : 5;
   camPos.x += dx * spd * dt;
   camPos.z += dz * spd * dt;
@@ -1102,10 +1220,10 @@ function _tickGlide(dt) {
     gameState = 'playing';
     camPos.y  = terrainHeight(camPos.x, camPos.z) + EYE_H; camGrounded = true;
     showGlideHUD(false);
-    renderer.domElement.requestPointerLock();
+    if (controlMode === 'pc') renderer.domElement.requestPointerLock();
 
     const msg = document.getElementById('pointer-lock-msg');
-    if (msg) msg.style.display = 'flex';
+    if (msg) msg.style.display = controlMode === 'pc' ? 'flex' : 'none';
 
     enemies3d.forEach(e => {
       if (!e.activated) {
@@ -1129,7 +1247,13 @@ function _tickMove(dt) {
   if (keys['KeyA'] || keys['ArrowLeft'])  { dx -= right.x; dz -= right.z; }
   if (keys['KeyD'] || keys['ArrowRight']) { dx += right.x; dz += right.z; }
 
-  const moving = Math.hypot(dx, dz) > 0;
+  // Touch joystick (mobile)
+  if (controlMode === 'mobile' && (touchMove.x || touchMove.y)) {
+    dx += fwd.x * (-touchMove.y) + right.x * touchMove.x;
+    dz += fwd.z * (-touchMove.y) + right.z * touchMove.x;
+  }
+
+  const moving = Math.hypot(dx, dz) > 0.001;
   if (moving) { const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
 
   const sprint = (keys['ShiftLeft'] || keys['ShiftRight']) ? SPRINT_MULT : 1;
@@ -1537,6 +1661,7 @@ function endGame3d(won) {
   gameState = won ? 'won' : 'dead';
   cancelAnimationFrame(animFrame);
   teardownInput3d();
+  showMobileControls(false);
   showBusHUD(false); showGlideHUD(false);
 
   const elapsed = (Date.now() - startTime) / 1000;
