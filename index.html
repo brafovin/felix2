@@ -156,6 +156,17 @@
   <!-- INTERACT PROMPT -->
   <div id="interact-prompt" style="display:none;">E — Tür öffnen</div>
 
+  <!-- EMOTE MENU -->
+  <div id="emote-menu" style="display:none;">
+    <div class="emote-title">TANZ / EMOTE <kbd>G</kbd></div>
+    <div class="emote-grid">
+      <button class="emote-btn" onclick="startEmote(0)">👋<br>Winken</button>
+      <button class="emote-btn" onclick="startEmote(1)">🎉<br>Jubeln</button>
+      <button class="emote-btn" onclick="startEmote(2)">🔄<br>Drehen</button>
+      <button class="emote-btn" onclick="startEmote(3)">💃<br>Tanzen</button>
+    </div>
+  </div>
+
   <!-- STORM WARNING -->
   <div id="storm-warning" class="hidden">⚡ STURM KOMMT!</div>
 
@@ -257,6 +268,10 @@
   </div>
   <div class="mp-wrap">
     <div class="mp-roominfo">Spieler <span id="mp-count">1/4</span></div>
+    <button class="btn btn-secondary" style="font-size:13px;padding:6px 18px;margin:4px 0 10px;"
+      onclick="navigator.clipboard&&navigator.clipboard.writeText(document.getElementById('mp-room-code').textContent).then(()=>this.textContent='✓ Kopiert!').catch(()=>{});this.textContent='✓ Kopiert!'">
+      📋 Code kopieren
+    </button>
     <div id="mp-player-list" class="mp-player-list"></div>
     <button id="mp-start-btn" class="btn btn-primary big" onclick="mpStartMatch()">SPIEL STARTEN ▶</button>
     <div id="mp-wait" class="mp-wait">⏳ Warte auf den Host…</div>

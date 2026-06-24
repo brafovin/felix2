@@ -8,6 +8,17 @@
   let roomCode = null, maxPlayers = 4, localName = 'Spieler';
   let lobbyPlayers = [];            // [{id, name}]
   let started = false, lastSent = 0;
+  let _createRetries = 0;
+
+  // Explicit STUN servers for better WebRTC connectivity
+  const ICE_CFG = {
+    iceServers: [
+      { urls: 'stun:stun.l.google.com:19302' },
+      { urls: 'stun:stun1.l.google.com:19302' },
+      { urls: 'stun:stun2.l.google.com:19302' },
+      { urls: 'stun:stun3.l.google.com:19302' },
+    ]
+  };
 
   const $ = id => document.getElementById(id);
 
@@ -18,15 +29,23 @@
     return s;
   }
 
-  function netStatus(msg) { const e = $('mp-status'); if (e) e.textContent = msg || ''; }
+  function netStatus(msg, ok) {
+    const e = $('mp-status');
+    if (!e) return;
+    e.textContent = msg || '';
+    e.style.color = ok ? '#22c55e' : (msg ? '#f87171' : '#aaa');
+  }
 
   function ensurePeerLib(cb) {
     if (window.Peer) return cb();
-    netStatus('Lade Netzwerk-Bibliothek…');
+    netStatus('Lade Netzwerk-Bibliothek…', false);
     let tries = 0;
     const iv = setInterval(() => {
       if (window.Peer) { clearInterval(iv); cb(); }
-      else if (++tries > 60) { clearInterval(iv); netStatus('Konnte Peer.js nicht laden (Internet?).'); }
+      else if (++tries > 80) {
+        clearInterval(iv);
+        netStatus('Peer.js konnte nicht geladen werden – Internet-Verbindung prüfen.');
+      }
     }, 100);
   }
 
@@ -35,14 +54,16 @@
     isHost = true; started = false;
     maxPlayers = Math.max(2, Math.min(10, parseInt(($('mp-maxplayers') || {}).value) || 4));
     localName = (($('mp-name') || {}).value || 'Host').slice(0, 14) || 'Host';
-    roomCode = rcode();
-    netStatus('Erstelle Raum…');
+    if (_createRetries === 0) roomCode = rcode();
+    netStatus('Erstelle Raum…', false);
     ensurePeerLib(() => {
-      peer = new Peer(PREFIX + roomCode, { debug: 1 });
+      if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+      peer = new Peer(PREFIX + roomCode, { debug: 0, config: ICE_CFG });
       peer.on('open', () => {
+        _createRetries = 0;
         myId = 'HOST';
         lobbyPlayers = [{ id: 'HOST', name: localName }];
-        showRoom(); renderLobby(); netStatus('');
+        showRoom(); renderLobby(); netStatus('', true);
       });
       peer.on('connection', conn => {
         if (started || Object.keys(conns).length + 1 >= maxPlayers) {
@@ -58,9 +79,29 @@
             if (window.mpRemove) mpRemove(conn.peer);
             broadcastLobby(); renderLobby();
           });
+          conn.on('error', err => console.warn('conn error', err));
         });
       });
-      peer.on('error', e => netStatus('Fehler: ' + (e.type || e)));
+      peer.on('error', e => {
+        if (e.type === 'unavailable-id' && _createRetries < 5) {
+          // Room code taken — generate a new one and retry
+          _createRetries++;
+          roomCode = rcode();
+          netStatus('Code vergeben, versuche neuen Code…', false);
+          setTimeout(createRoom, 600);
+        } else {
+          _createRetries = 0;
+          const msgs = {
+            'network': 'Netzwerkfehler – Internet-Verbindung prüfen.',
+            'server-error': 'Server-Fehler – bitte erneut versuchen.',
+            'browser-incompatible': 'Browser unterstützt WebRTC nicht.',
+          };
+          netStatus(msgs[e.type] || ('Fehler: ' + (e.type || e)));
+        }
+      });
+      peer.on('disconnected', () => {
+        if (!started) { netStatus('Verbindung zum Server verloren.'); }
+      });
     });
   }
 
@@ -109,19 +150,39 @@
     if (code.length < 4) { netStatus('Bitte 4-stelligen Code eingeben.'); return; }
     roomCode = code;
     localName = (($('mp-name') || {}).value || 'Spieler').slice(0, 14) || 'Spieler';
-    netStatus('Verbinde mit Raum ' + code + '…');
+    netStatus('Verbinde mit Raum ' + code + '…', false);
     ensurePeerLib(() => {
-      peer = new Peer({ debug: 1 });
+      if (peer) { try { peer.destroy(); } catch (e) {} peer = null; }
+      peer = new Peer({ debug: 0, config: ICE_CFG });
       peer.on('open', id => {
         myId = id;
-        const conn = peer.connect(PREFIX + code, { reliable: true });
+        const conn = peer.connect(PREFIX + code, { reliable: true, serialization: 'json' });
         hostConn = conn;
-        conn.on('open', () => { conn.send({ t: 'hello', name: localName }); showRoom(); netStatus('Verbunden — warte auf Host…'); });
+        conn.on('open', () => {
+          conn.send({ t: 'hello', name: localName });
+          showRoom();
+          netStatus('Verbunden — warte auf Host…', true);
+        });
         conn.on('data', d => clientOnData(d));
-        conn.on('close', () => { if (!started) netStatus('Verbindung getrennt.'); });
-        setTimeout(() => { if (!hostConn || !hostConn.open) netStatus('Kein Raum mit Code ' + code + ' gefunden?'); }, 7000);
+        conn.on('close', () => {
+          if (!started) netStatus('Verbindung getrennt.');
+        });
+        conn.on('error', err => {
+          netStatus('Verbindungsfehler: ' + (err.type || err));
+        });
       });
-      peer.on('error', e => netStatus('Fehler: ' + (e.type || e)));
+      peer.on('error', e => {
+        const msgs = {
+          'peer-unavailable': 'Kein Raum mit Code ' + code + ' gefunden.',
+          'network': 'Netzwerkfehler – Internet-Verbindung prüfen.',
+          'server-error': 'Server-Fehler – bitte erneut versuchen.',
+          'browser-incompatible': 'Browser unterstützt WebRTC nicht.',
+        };
+        netStatus(msgs[e.type] || ('Fehler: ' + (e.type || e)));
+      });
+      peer.on('disconnected', () => {
+        if (!started) netStatus('Verbindung zum Server verloren.');
+      });
     });
   }
 
@@ -170,7 +231,7 @@
       }
     },
     leave() {
-      NET.active = false; started = false;
+      NET.active = false; started = false; _createRetries = 0;
       try { Object.values(conns).forEach(c => c.close()); } catch (e) {}
       try { if (hostConn) hostConn.close(); } catch (e) {}
       try { if (peer) peer.destroy(); } catch (e) {}

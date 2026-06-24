@@ -16,6 +16,9 @@ let gameTime = 0, startTime = 0, animFrame = null;
 let keys = {}, shooting = false;
 let yaw = 0, pitch = 0, pointerLocked = false;
 
+// ── Emotes / dances ───────────────────────────────────────────────────────────
+let emoteActive = false, emoteType = 0, emoteT = 0, emoteMenuOpen = false;
+
 // ── Control mode (pc | mobile) + touch state ───────────────────────────────────
 let controlMode = 'pc';
 let touchMove = { x: 0, y: 0 };       // analog joystick vector (-1..1)
@@ -1110,6 +1113,7 @@ function startGame(opts) {
 
   gameTime = 0; startTime = Date.now();
   keys = {}; shooting = false;
+  emoteActive = false; emoteMenuOpen = false; _toggleEmoteMenu(false);
   playerAlt = 0; gliderOpen = false; freefallT = 0;
 
   if (mpMode) {
@@ -1211,6 +1215,10 @@ const _kd = e => {
   if (e.code === 'KeyE'   && gameState === 'playing') {
     const d = doors.find(dd => Math.hypot(dd.x - camPos.x, dd.z - camPos.z) < 3.0);
     if (d) d.open = !d.open;
+  }
+  if (e.code === 'KeyG'   && gameState === 'playing') {
+    if (emoteMenuOpen) { _toggleEmoteMenu(false); emoteMenuOpen = false; }
+    else { _toggleEmoteMenu(true); }
   }
   if (e.code === 'KeyF'   && gameState === 'playing') { /* medkit shortcut */ }
 };
@@ -1368,6 +1376,7 @@ function tick3d(dt) {
     tickFX(dt);
     _tickPickupBob(dt);
     _tickDoors(dt);
+    _tickEmote(dt);
     updateHUD3d();
 
     if (!playerAlive) endGame3d(false);
@@ -1488,7 +1497,11 @@ function _tickMove(dt) {
   }
 
   const moving = Math.hypot(dx, dz) > 0.001;
-  if (moving) { const l = Math.hypot(dx, dz); dx /= l; dz /= l; }
+  if (moving) {
+    const l = Math.hypot(dx, dz); dx /= l; dz /= l;
+    if (emoteActive) { emoteActive = false; camera.rotation.z = 0; }
+    if (emoteMenuOpen) { _toggleEmoteMenu(false); emoteMenuOpen = false; }
+  }
 
   const sprint = (keys['ShiftLeft'] || keys['ShiftRight']) ? SPRINT_MULT : 1;
   camPos.x += dx * PLAYER_SPEED * sprint * dt;
@@ -1756,6 +1769,55 @@ function _tickDoors(dt) {
   const near = doors.find(d => Math.hypot(d.x - camPos.x, d.z - camPos.z) < 3.0);
   const prompt = document.getElementById('interact-prompt');
   if (prompt) prompt.style.display = near ? 'block' : 'none';
+}
+
+// ─── EMOTES ───────────────────────────────────────────────────────────────────
+const EMOTES = [
+  { name: '👋 Winken',   dur: 2.5 },
+  { name: '🎉 Jubeln',   dur: 2.0 },
+  { name: '🔄 Drehen',   dur: 2.8 },
+  { name: '💃 Tanzen',   dur: 3.2 },
+];
+
+function startEmote(type) {
+  emoteActive = true; emoteType = type; emoteT = 0;
+  emoteMenuOpen = false;
+  _toggleEmoteMenu(false);
+  showXPNotif(EMOTES[type].name);
+}
+
+function _toggleEmoteMenu(show) {
+  emoteMenuOpen = show;
+  const m = document.getElementById('emote-menu');
+  if (m) m.style.display = show ? 'flex' : 'none';
+}
+
+function _tickEmote(dt) {
+  if (!emoteActive) return;
+  emoteT += dt;
+  const dur = EMOTES[emoteType].dur;
+  const t = emoteT / dur;
+
+  // Camera-based dance animations (first-person view)
+  if (emoteType === 0) {
+    // Wave: tilt camera side to side
+    camera.rotation.z = Math.sin(emoteT * 6) * 0.25 * Math.max(0, 1 - t * 0.6);
+  } else if (emoteType === 1) {
+    // Celebrate: bounce up
+    camPos.y += Math.abs(Math.sin(emoteT * 8)) * 0.012;
+    camera.rotation.z = Math.sin(emoteT * 4) * 0.12;
+  } else if (emoteType === 2) {
+    // Spin: full 360
+    yaw += dt * (Math.PI * 2 / dur);
+  } else if (emoteType === 3) {
+    // Dance: rhythmic sway + bob
+    camera.rotation.z = Math.sin(emoteT * 5) * 0.18;
+    camPos.y += Math.sin(emoteT * 10) * 0.008;
+  }
+
+  if (emoteT >= dur) {
+    emoteActive = false; camera.rotation.z = 0;
+  }
 }
 
 // ─── STORM ────────────────────────────────────────────────────────────────────
