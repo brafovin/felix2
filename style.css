@@ -555,6 +555,7 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  z-index: 10;
 }
 
 #hud-health {
@@ -687,6 +688,7 @@ body {
   border-radius: 4px;
   overflow: hidden;
   box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+  z-index: 15;
 }
 
 #minimap { display: block; }

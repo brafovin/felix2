@@ -547,6 +547,23 @@ function buildWeaponMesh() {
 }
 
 // =============================================================================
+//  BULLET TRACER
+// =============================================================================
+
+function spawnTracer(start, end) {
+  const dir = end.clone().sub(start);
+  const len = Math.max(0.1, dir.length());
+  const mid = start.clone().add(dir.clone().multiplyScalar(0.5));
+  const geo = new THREE.BoxGeometry(0.025, 0.025, len);
+  const mat = new THREE.MeshBasicMaterial({ color: 0xffee88, transparent: true, opacity: 0.85 });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.copy(mid);
+  mesh.lookAt(end);
+  scene.add(mesh);
+  hitFX.push({ mesh, life: 0.09, maxLife: 0.09, vx: 0, vy: 0, vz: 0 });
+}
+
+// =============================================================================
 //  HIT EFFECTS
 // =============================================================================
 
@@ -958,8 +975,13 @@ function _fire() {
     const targets = enemies3d.filter(e => e.alive && e.activated).map(e => e.group);
     const hits    = raycaster.intersectObjects(targets, true);
 
+    // Tracer start: just in front of camera (gun barrel position)
+    const tracerStart = camera.position.clone().add(dir.clone().multiplyScalar(0.6));
+
     if (hits.length > 0) {
       const hit = hits[0];
+      spawnTracer(tracerStart, hit.point);
+
       // Walk up to find the Enemy3D group
       let obj = hit.object;
       while (obj.parent && obj.parent !== scene) obj = obj.parent;
@@ -974,6 +996,10 @@ function _fire() {
         spawnHitFX(hit.point.clone(), 0xef4444);
         if (killed) { playerKills++; addKillFeedEntry('Du', enemy.name, '🔫'); }
       }
+    } else {
+      // Miss — tracer flies to max range
+      const missEnd = tracerStart.clone().add(dir.clone().multiplyScalar(g.range));
+      spawnTracer(tracerStart, missEnd);
     }
   }
 }
