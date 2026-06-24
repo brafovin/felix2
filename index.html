@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FortClash - Battle Royale</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- MAIN MENU -->
+<div id="main-menu" class="screen active">
+  <div class="menu-bg"></div>
+  <div class="menu-content">
+    <h1 class="game-title">FORT<span>CLASH</span></h1>
+    <p class="game-subtitle">BATTLE ROYALE</p>
+    <div class="menu-buttons">
+      <button class="btn btn-primary" onclick="showScreen('lobby')">SPIELEN</button>
+      <button class="btn btn-secondary" onclick="showScreen('battlepass')">BATTLE PASS</button>
+      <button class="btn btn-secondary" onclick="showScreen('locker')">LOCKER</button>
+    </div>
+    <div class="menu-stats">
+      <div class="stat"><span class="stat-label">SIEGE</span><span class="stat-value" id="menu-wins">0</span></div>
+      <div class="stat"><span class="stat-label">KILLS</span><span class="stat-value" id="menu-kills">0</span></div>
+      <div class="stat"><span class="stat-label">LEVEL</span><span class="stat-value" id="menu-level">1</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- LOBBY / SKIN SELECT -->
+<div id="lobby" class="screen">
+  <div class="lobby-bg"></div>
+  <div class="lobby-content">
+    <h2>LOBBY</h2>
+    <div class="lobby-player-preview">
+      <canvas id="player-preview" width="200" height="300"></canvas>
+      <div class="selected-skin-name" id="selected-skin-name">Standard</div>
+    </div>
+    <div class="lobby-actions">
+      <button class="btn btn-primary big" onclick="startGame()">SPIELEN ▶</button>
+      <button class="btn btn-secondary" onclick="showScreen('locker')">SKIN WECHSELN</button>
+      <button class="btn btn-back" onclick="showScreen('main-menu')">← ZURÜCK</button>
+    </div>
+  </div>
+</div>
+
+<!-- LOCKER (Skin Selection) -->
+<div id="locker" class="screen">
+  <div class="screen-header">
+    <h2>LOCKER</h2>
+    <button class="btn btn-back" onclick="showScreen('main-menu')">← ZURÜCK</button>
+  </div>
+  <div class="locker-tabs">
+    <button class="tab-btn active" onclick="setLockerTab('outfits', this)">OUTFITS</button>
+    <button class="tab-btn" onclick="setLockerTab('pickaxes', this)">SPITZHACKEN</button>
+    <button class="tab-btn" onclick="setLockerTab('gliders', this)">GLEITER</button>
+  </div>
+  <div id="locker-grid" class="locker-grid"></div>
+</div>
+
+<!-- BATTLE PASS -->
+<div id="battlepass" class="screen">
+  <div class="screen-header">
+    <h2>BATTLE PASS <span class="season-label">SEASON 1</span></h2>
+    <button class="btn btn-back" onclick="showScreen('main-menu')">← ZURÜCK</button>
+  </div>
+  <div class="bp-header">
+    <div class="bp-level-info">
+      <span>LEVEL <strong id="bp-current-level">1</strong></span>
+      <div class="xp-bar-container">
+        <div class="xp-bar" id="xp-bar"></div>
+        <span class="xp-text" id="xp-text">0 / 1000 XP</span>
+      </div>
+    </div>
+    <div class="bp-purchase" id="bp-purchase-area">
+      <div id="bp-status"></div>
+    </div>
+  </div>
+  <div class="bp-tiers-scroll">
+    <div id="bp-tiers" class="bp-tiers"></div>
+  </div>
+</div>
+
+<!-- GAME CANVAS -->
+<div id="game-screen" class="screen">
+  <canvas id="game-canvas"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div id="hud-health">
+      <div class="hud-label">HP</div>
+      <div class="health-bar-bg"><div id="health-bar" class="health-bar"></div></div>
+      <div id="health-value">100</div>
+    </div>
+    <div id="hud-shield">
+      <div class="hud-label">SCHILD</div>
+      <div class="shield-bar-bg"><div id="shield-bar" class="shield-bar"></div></div>
+      <div id="shield-value">0</div>
+    </div>
+    <div id="hud-ammo">
+      <span id="ammo-current">30</span><span class="ammo-sep">/</span><span id="ammo-reserve">90</span>
+    </div>
+    <div id="hud-kills">
+      <span id="kill-count">0</span> <span class="hud-label">KILLS</span>
+    </div>
+    <div id="hud-players">
+      <span id="player-count">100</span> <span class="hud-label">SPIELER</span>
+    </div>
+    <div id="hud-storm">
+      <div class="storm-icon">⚡</div>
+      <span id="storm-timer">--</span>
+    </div>
+    <div id="hud-weapon">
+      <div id="weapon-icon">🔫</div>
+      <div id="weapon-name">Sturmgewehr</div>
+    </div>
+    <div id="minimap-container">
+      <canvas id="minimap" width="150" height="150"></canvas>
+    </div>
+  </div>
+
+  <!-- CROSSHAIR -->
+  <div id="crosshair">+</div>
+
+  <!-- DAMAGE INDICATOR -->
+  <div id="damage-numbers"></div>
+
+  <!-- KILL FEED -->
+  <div id="kill-feed"></div>
+
+  <!-- STORM WARNING -->
+  <div id="storm-warning" class="hidden">⚡ STURM KOMMT!</div>
+</div>
+
+<!-- DEATH SCREEN -->
+<div id="death-screen" class="screen">
+  <div class="death-content">
+    <h2 class="death-title">AUSGESCHIEDEN</h2>
+    <div class="death-stats">
+      <div class="death-stat"><span>PLATZIERUNG</span><span id="death-placement">#42</span></div>
+      <div class="death-stat"><span>KILLS</span><span id="death-kills">0</span></div>
+      <div class="death-stat"><span>ÜBERLEBT</span><span id="death-time">0:00</span></div>
+      <div class="death-stat"><span>XP VERDIENT</span><span id="death-xp">+0</span></div>
+    </div>
+    <button class="btn btn-primary" onclick="showScreen('main-menu')">ZUM MENÜ</button>
+    <button class="btn btn-secondary" onclick="startGame()">NOCHMAL SPIELEN</button>
+  </div>
+</div>
+
+<!-- WIN SCREEN -->
+<div id="win-screen" class="screen">
+  <div class="win-content">
+    <div class="victory-royale">VICTORY ROYALE!</div>
+    <div class="win-fireworks"></div>
+    <div class="win-stats">
+      <div class="win-stat"><span>KILLS</span><span id="win-kills">0</span></div>
+      <div class="win-stat"><span>ÜBERLEBT</span><span id="win-time">0:00</span></div>
+      <div class="win-stat"><span>XP VERDIENT</span><span id="win-xp">+0</span></div>
+    </div>
+    <button class="btn btn-primary" onclick="showScreen('main-menu')">WEITER</button>
+  </div>
+</div>
+
+<script src="js/skins.js"></script>
+<script src="js/battle-pass.js"></script>
+<script src="js/player.js"></script>
+<script src="js/enemies.js"></script>
+<script src="js/game.js"></script>
+<script src="js/ui.js"></script>
+</body>
+</html>
