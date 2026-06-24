@@ -72,6 +72,15 @@ let pickups3d = [];
 // ── Chests (weapon loot) ──────────────────────────────────────────────────────
 let chests3d = [];
 
+// ── Doors ─────────────────────────────────────────────────────────────────────
+let doors = [];
+
+// ── Building collision boxes ───────────────────────────────────────────────────
+let buildingBoxes = [];
+
+// ── Melee ─────────────────────────────────────────────────────────────────────
+let meleeCd = 0;
+
 // ── Bullets (enemy projectiles for visual) ────────────────────────────────────
 let eBullets = [];
 
@@ -206,7 +215,7 @@ function addRoadStrip(g, mat, lineMat, fixed, alongZ, roadW, seg, reach) {
   for (let t = -reach; t <= reach; t += seg) {
     const x = alongZ ? fixed : t;
     const z = alongZ ? t : fixed;
-    const y = terrainHeight(x, z) + 0.07;
+    const y = 0.15;  // flat/straight road
     const w = alongZ ? roadW : seg;
     const d = alongZ ? seg : roadW;
     const road = new THREE.Mesh(new THREE.BoxGeometry(w, 0.14, d), mat);
@@ -311,34 +320,63 @@ function addBush(g, x, z, rng) {
 }
 
 function addBuilding(g, x, z, rng) {
-  const w = 7 + rng() * 8,  d = 6 + rng() * 7, h = 3.5 + rng() * 4;
+  const w = 7 + rng() * 8, d = 6 + rng() * 7, h = 3.5 + rng() * 4;
   const grp = new THREE.Group();
 
-  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a7050 });
+  const wallMat = new THREE.MeshLambertMaterial({ color: 0x8a7050, side: THREE.DoubleSide });
   const roofMat = new THREE.MeshLambertMaterial({ color: 0x5a3a25 });
+  const floorMat = new THREE.MeshLambertMaterial({ color: 0x7a6040 });
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x5a3010, side: THREE.DoubleSide });
   const winMat  = new THREE.MeshLambertMaterial({ color: 0x90d0f0, emissive: 0x305060, emissiveIntensity: 0.4 });
 
-  const walls = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), wallMat);
-  walls.position.y = h / 2;
-  walls.castShadow = true; walls.receiveShadow = true;
-  grp.add(walls);
+  const wt = 0.22;
+  const doorW = 1.6, doorH = 2.2;
 
+  // Back wall
+  const bk = new THREE.Mesh(new THREE.BoxGeometry(w, h, wt), wallMat);
+  bk.position.set(0, h / 2, -d / 2); bk.castShadow = true; grp.add(bk);
+  // Left wall
+  const lw = new THREE.Mesh(new THREE.BoxGeometry(wt, h, d), wallMat);
+  lw.position.set(-w / 2, h / 2, 0); lw.castShadow = true; grp.add(lw);
+  // Right wall
+  const rw = new THREE.Mesh(new THREE.BoxGeometry(wt, h, d), wallMat);
+  rw.position.set(w / 2, h / 2, 0); rw.castShadow = true; grp.add(rw);
+  // Front wall: two side panels + top strip above door
+  const sideW = (w - doorW) / 2;
+  const fl = new THREE.Mesh(new THREE.BoxGeometry(sideW, h, wt), wallMat);
+  fl.position.set(-w / 2 + sideW / 2, h / 2, d / 2); grp.add(fl);
+  const fr = new THREE.Mesh(new THREE.BoxGeometry(sideW, h, wt), wallMat);
+  fr.position.set(w / 2 - sideW / 2, h / 2, d / 2); grp.add(fr);
+  const ft = new THREE.Mesh(new THREE.BoxGeometry(doorW, h - doorH, wt), wallMat);
+  ft.position.set(0, doorH + (h - doorH) / 2, d / 2); grp.add(ft);
+
+  // Floor
+  const floor = new THREE.Mesh(new THREE.BoxGeometry(w - wt * 2, 0.12, d - wt * 2), floorMat);
+  floor.position.y = 0.06; grp.add(floor);
+
+  // Roof
   const roof = new THREE.Mesh(new THREE.BoxGeometry(w + 0.5, 0.5, d + 0.5), roofMat);
-  roof.position.y = h + 0.25;
-  roof.castShadow = true;
-  grp.add(roof);
+  roof.position.y = h + 0.25; roof.castShadow = true; grp.add(roof);
 
-  // Windows
-  const wGeo = new THREE.BoxGeometry(0.05, 1.0, 1.2);
-  [-w/2 + 1.8, w/2 - 1.8].forEach(wx => {
-    const win = new THREE.Mesh(wGeo, winMat);
-    win.position.set(wx, h * 0.55, 0);
-    grp.add(win);
+  // Windows on back wall
+  [-w / 3, w / 3].forEach(wx => {
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.9, 1.1), winMat);
+    win.position.set(wx, h * 0.55, -d / 2 + 0.12); grp.add(win);
   });
 
+  // Door pivot — hinge at left edge of door gap
+  const doorPivot = new THREE.Group();
+  doorPivot.position.set(-doorW / 2, 0, d / 2);
+  const doorMesh = new THREE.Mesh(new THREE.BoxGeometry(doorW - 0.06, doorH - 0.08, wt * 0.7), doorMat);
+  doorMesh.position.set(doorW / 2, doorH / 2, 0);
+  doorPivot.add(doorMesh);
+  grp.add(doorPivot);
+
   grp.position.set(x, terrainHeight(x, z), z);
-  grp.userData = { solidHW: w / 2, solidHD: d / 2, h };
   g.add(grp);
+
+  buildingBoxes.push({ x, z, hw: w / 2, hd: d / 2 });
+  doors.push({ pivot: doorPivot, open: false, x, z: z + d / 2 });
 }
 
 // Tall high-rise tower with glass window bands
@@ -376,6 +414,7 @@ function addTower(g, x, z, rng) {
   grp.position.set(x, terrainHeight(x, z), z);
   grp.userData = { solidHW: w / 2, solidHD: d / 2, h };
   g.add(grp);
+  buildingBoxes.push({ x, z, hw: w / 2, hd: d / 2 });
 }
 
 // A downtown of skyscrapers plus a few scattered ones
@@ -600,6 +639,11 @@ class Enemy3D {
     this.busJumpT = 0; this.busLandX = x; this.busLandZ = z;
     // Bots also start unarmed and must loot a chest first
     this.armed = false; this.range = 90; this.targetChest = null;
+    // Smarter combat AI
+    this.strafeDir = (id % 2 ? 1 : -1);
+    this.strafeCd  = 1.2 + (id % 7) * 0.25;
+    this.optRange  = 14 + (id % 8) * 4;
+    this._botTarget = null;
 
     this.group = this._buildMesh();
     this.group.position.set(x, 0, z);
@@ -683,16 +727,37 @@ class Enemy3D {
 
     this.fireCd  -= dt;
     this.stateT  -= dt;
+    this.strafeCd -= dt;
+    if (this.strafeCd <= 0) {
+      this.strafeDir *= -1;
+      this.strafeCd = 1.0 + Math.random() * 1.5;
+    }
 
-    // Storm avoidance
+    // State priority
     if (Math.hypot(this.x - sCX, this.z - sCZ) > sCR - 5) {
       this.state = 'storm';
     } else if (this.hp < this.fleeHP) {
       this.state = 'flee';
     } else if (!this.armed) {
-      this.state = 'loot';     // must find a chest before fighting
-    } else if (dp < this.detR) {
+      this.state = 'loot';
+    } else if (dp < this.detR && playerAlive) {
       this.state = 'hunt';
+    } else if (this.armed) {
+      // Look for a nearby bot to fight
+      if (!this._botTarget || !this._botTarget.alive) {
+        this._botTarget = null;
+        const near = enemies3d.find(e => e !== this && e.alive && e.activated &&
+          Math.hypot(e.x - this.x, e.z - this.z) < this.detR * 0.8);
+        if (near) this._botTarget = near;
+      }
+      if (this._botTarget) {
+        this.state = 'huntBot';
+      } else if (this.stateT <= 0) {
+        this.state = 'roam';
+        this.roamTX = this.x + (Math.random()-0.5)*120;
+        this.roamTZ = this.z + (Math.random()-0.5)*120;
+        this.stateT = 3 + Math.random() * 4;
+      }
     } else if (this.stateT <= 0) {
       this.state = 'roam';
       this.roamTX = this.x + (Math.random()-0.5)*120;
@@ -702,7 +767,6 @@ class Enemy3D {
 
     let tx = this.roamTX, tz = this.roamTZ;
     if (this.state === 'loot') {
-      // head to the nearest unopened chest
       if (!this.targetChest || this.targetChest.opened) this.targetChest = this._nearestChest();
       if (this.targetChest) {
         tx = this.targetChest.x; tz = this.targetChest.z;
@@ -710,18 +774,51 @@ class Enemy3D {
           this._armFromChest(this.targetChest);
         }
       } else {
-        // no chests left — grab a basic weapon so late-game bots can fight
         this._armBasic();
       }
     } else if (this.state === 'hunt') {
-      if (dp > 7) { tx = px; tz = pz; }
+      // Strafe perpendicular to player, maintain optimal range
+      const perpX = (pz - this.z) / (dp || 1);
+      const perpZ = -(px - this.x) / (dp || 1);
+      if (dp > this.optRange + 6) {
+        tx = px + perpX * this.strafeDir * 4;
+        tz = pz + perpZ * this.strafeDir * 4;
+      } else if (dp < this.optRange - 6) {
+        tx = this.x - (px - this.x) * 0.5 + perpX * this.strafeDir * 8;
+        tz = this.z - (pz - this.z) * 0.5 + perpZ * this.strafeDir * 8;
+      } else {
+        tx = this.x + perpX * this.strafeDir * 10;
+        tz = this.z + perpZ * this.strafeDir * 10;
+      }
       if (dp < this.range && this.fireCd <= 0 && playerAlive) {
         this._shoot();
         this.fireCd = this.fireRate;
       }
+    } else if (this.state === 'huntBot') {
+      const bt = this._botTarget;
+      if (!bt || !bt.alive) { this._botTarget = null; this.state = 'roam'; }
+      else {
+        const dbt = Math.hypot(this.x - bt.x, this.z - bt.z);
+        const bperpX = (bt.z - this.z) / (dbt || 1);
+        const bperpZ = -(bt.x - this.x) / (dbt || 1);
+        if (dbt > this.optRange + 6) {
+          tx = bt.x + bperpX * this.strafeDir * 4;
+          tz = bt.z + bperpZ * this.strafeDir * 4;
+        } else {
+          tx = this.x + bperpX * this.strafeDir * 8;
+          tz = this.z + bperpZ * this.strafeDir * 8;
+        }
+        if (dbt < this.range && this.fireCd <= 0) {
+          const killed = bt.takeDamage(this.dmg);
+          if (killed) { addKillFeedEntry(this.name, bt.name, '🤖'); this._botTarget = null; }
+          this.fireCd = this.fireRate;
+        }
+      }
     } else if (this.state === 'flee') {
-      tx = this.x + (this.x - px) * 3;
-      tz = this.z + (this.z - pz) * 3;
+      const perpX = (pz - this.z) / (dp || 1);
+      const perpZ = -(px - this.x) / (dp || 1);
+      tx = this.x + (this.x - px) * 2 + perpX * this.strafeDir * 6;
+      tz = this.z + (this.z - pz) * 2 + perpZ * this.strafeDir * 6;
     } else if (this.state === 'storm') {
       tx = sCX + (this.x - sCX) * 0.3;
       tz = sCZ + (this.z - sCZ) * 0.3;
@@ -986,6 +1083,8 @@ function startGame(opts) {
 
   // Reset state
   eBullets = []; hitFX = [];
+  doors = [];
+  buildingBoxes = [];
   mpReset();
 
   buildWorld();
@@ -1109,6 +1208,10 @@ const _kd = e => {
   if (e.code === 'Digit3') switchGun(2);
   if (e.code === 'Digit4') switchGun(3);
   if (e.code === 'Digit5') switchGun(4);
+  if (e.code === 'KeyE'   && gameState === 'playing') {
+    const d = doors.find(dd => Math.hypot(dd.x - camPos.x, dd.z - camPos.z) < 3.0);
+    if (d) d.open = !d.open;
+  }
   if (e.code === 'KeyF'   && gameState === 'playing') { /* medkit shortcut */ }
 };
 const _ku = e => { keys[e.code] = false; };
@@ -1264,6 +1367,7 @@ function tick3d(dt) {
     _tickBotFights(dt);
     tickFX(dt);
     _tickPickupBob(dt);
+    _tickDoors(dt);
     updateHUD3d();
 
     if (!playerAlive) endGame3d(false);
@@ -1390,6 +1494,18 @@ function _tickMove(dt) {
   camPos.x += dx * PLAYER_SPEED * sprint * dt;
   camPos.z += dz * PLAYER_SPEED * sprint * dt;
 
+  // Building AABB collision
+  const PR = 0.45;
+  buildingBoxes.forEach(b => {
+    const ox = camPos.x - b.x, oz = camPos.z - b.z;
+    if (Math.abs(ox) < b.hw + PR && Math.abs(oz) < b.hd + PR) {
+      const px = b.hw + PR - Math.abs(ox);
+      const pz = b.hd + PR - Math.abs(oz);
+      if (px < pz) camPos.x += Math.sign(ox) * px;
+      else         camPos.z += Math.sign(oz) * pz;
+    }
+  });
+
   const groundY = terrainHeight(camPos.x, camPos.z) + EYE_H;
   if (keys['Space'] && camGrounded) { camVY = 7; camGrounded = false; }
   camVY += GRAVITY * dt;
@@ -1415,9 +1531,35 @@ function _tickMove(dt) {
 
 // ─── WEAPON ───────────────────────────────────────────────────────────────────
 
+function _punch() {
+  let hit = false;
+  const fwd = new THREE.Vector3(-Math.sin(yaw), 0, -Math.cos(yaw));
+  enemies3d.forEach(e => {
+    if (!e.alive) return;
+    const d = Math.hypot(e.x - camPos.x, e.z - camPos.z);
+    if (d < 2.6) {
+      const killed = e.takeDamage(30);
+      const wp = new THREE.Vector3(e.x, 1.5, e.z);
+      _showDmgNum(wp, 30, false);
+      spawnHitFX(wp, 0xffaa44);
+      if (killed) { playerKills++; addKillFeedEntry('Du', e.name, '✊'); }
+      hit = true;
+    }
+  });
+  if (!hit) {
+    // visual punch swing even on miss
+    if (weaponGroup) { weaponGroup.position.z = -0.3; setTimeout(() => { if (weaponGroup) weaponGroup.position.z = 0; }, 120); }
+  }
+}
+
 function _tickWeapon(dt) {
   fireCooldown -= dt;
-  if (GUNS.length === 0) return;   // no weapon yet — loot a chest
+  meleeCd -= dt;
+  if (GUNS.length === 0) {
+    // Fist punch: left-click when unarmed
+    if (shooting && meleeCd <= 0) { _punch(); meleeCd = 0.65; }
+    return;
+  }
   if (reloading) {
     reloadTimer -= dt;
     if (reloadTimer <= 0) {
@@ -1602,6 +1744,18 @@ function _tickPickupBob(dt) {
   pickups3d.forEach((p, i) => {
     if (!p.collected) p.mesh.position.y = (p.baseY ?? 0.5) + Math.sin(t + i) * 0.2;
   });
+}
+
+// ─── DOORS ────────────────────────────────────────────────────────────────────
+
+function _tickDoors(dt) {
+  doors.forEach(d => {
+    const target = d.open ? -Math.PI / 2 : 0;
+    d.pivot.rotation.y += (target - d.pivot.rotation.y) * Math.min(1, dt * 7);
+  });
+  const near = doors.find(d => Math.hypot(d.x - camPos.x, d.z - camPos.z) < 3.0);
+  const prompt = document.getElementById('interact-prompt');
+  if (prompt) prompt.style.display = near ? 'block' : 'none';
 }
 
 // ─── STORM ────────────────────────────────────────────────────────────────────
