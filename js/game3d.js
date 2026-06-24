@@ -546,6 +546,8 @@ class Enemy3D {
     this.stateT = 0; this.fleeHP = 18;
     this.activated = false;
     this.busJumpT = 0; this.busLandX = x; this.busLandZ = z;
+    // Bots also start unarmed and must loot a chest first
+    this.armed = false; this.range = 90; this.targetChest = null;
 
     this.group = this._buildMesh();
     this.group.position.set(x, 0, z);
@@ -635,6 +637,8 @@ class Enemy3D {
       this.state = 'storm';
     } else if (this.hp < this.fleeHP) {
       this.state = 'flee';
+    } else if (!this.armed) {
+      this.state = 'loot';     // must find a chest before fighting
     } else if (dp < this.detR) {
       this.state = 'hunt';
     } else if (this.stateT <= 0) {
@@ -645,9 +649,21 @@ class Enemy3D {
     }
 
     let tx = this.roamTX, tz = this.roamTZ;
-    if (this.state === 'hunt') {
+    if (this.state === 'loot') {
+      // head to the nearest unopened chest
+      if (!this.targetChest || this.targetChest.opened) this.targetChest = this._nearestChest();
+      if (this.targetChest) {
+        tx = this.targetChest.x; tz = this.targetChest.z;
+        if (Math.hypot(this.x - this.targetChest.x, this.z - this.targetChest.z) < 2.6) {
+          this._armFromChest(this.targetChest);
+        }
+      } else {
+        // no chests left — grab a basic weapon so late-game bots can fight
+        this._armBasic();
+      }
+    } else if (this.state === 'hunt') {
       if (dp > 7) { tx = px; tz = pz; }
-      if (dp < 90 && this.fireCd <= 0 && playerAlive) {
+      if (dp < this.range && this.fireCd <= 0 && playerAlive) {
         this._shoot();
         this.fireCd = this.fireRate;
       }
@@ -681,6 +697,33 @@ class Enemy3D {
       vx: Math.sin(angle)*38, vz: Math.cos(angle)*38,
       dmg: this.dmg, life: 2.2
     });
+  }
+
+  _nearestChest() {
+    let best = null, bd = Infinity;
+    for (const c of chests3d) {
+      if (c.opened) continue;
+      const d = Math.hypot(this.x - c.x, this.z - c.z);
+      if (d < bd) { bd = d; best = c; }
+    }
+    return best;
+  }
+
+  _armFromChest(chest) {
+    if (chest.opened) { this.armed = true; return; }
+    chest.opened = true;
+    if (chest.group.userData.glow) chest.group.userData.glow.visible = false;
+    const gun = _randomGun();
+    this.armed   = true;
+    this.dmg     = Math.max(8, Math.round(gun.dmg * 0.6));   // bots a bit weaker
+    this.range   = Math.min(110, Math.max(40, gun.range * 0.25));
+    this.fireRate = Math.max(0.35, Math.min(1.6, gun.rate * 3 + 0.3));
+    this.targetChest = null;
+  }
+
+  _armBasic() {
+    this.armed = true;
+    this.dmg = 12; this.range = 70; this.fireRate = 0.8;
   }
 }
 
