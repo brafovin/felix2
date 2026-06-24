@@ -128,7 +128,7 @@ function initThree() {
 
   // Pointer lock
   renderer.domElement.addEventListener('click', () => {
-    if (gameState === 'playing') renderer.domElement.requestPointerLock();
+    if (gameState === 'playing' || gameState === 'bus' || gameState === 'gliding') renderer.domElement.requestPointerLock();
   });
   document.addEventListener('pointerlockchange', () => {
     pointerLocked = document.pointerLockElement === renderer.domElement;
@@ -168,7 +168,7 @@ function buildWorld() {
 
   // Objects
   const rng = seededRng(42);
-  for (let i = 0; i < 600; i++) {
+  for (let i = 0; i < 180; i++) {
     const x = (rng() - 0.5) * WORLD_SIZE * 0.92;
     const z = (rng() - 0.5) * WORLD_SIZE * 0.92;
     const r = rng();
@@ -184,10 +184,9 @@ function buildWorld() {
 function addGroundVariation(geo) {
   const pos = geo.attributes.position;
   for (let i = 0; i < pos.count; i++) {
-    const x = pos.getX(i), z = pos.getZ(i);
-    const h = Math.sin(x*0.008)*Math.cos(z*0.007)*2.5 +
-              Math.sin(x*0.025+z*0.018)*0.8;
-    pos.setY(i, h);
+    const x = pos.getX(i), y = pos.getY(i);
+    const h = Math.sin(x * 0.008) * Math.cos(y * 0.007) * 2.0 + Math.sin(x * 0.022 + y * 0.015) * 0.8;
+    pos.setZ(i, h);
   }
   geo.computeVertexNormals();
 }
@@ -1188,8 +1187,6 @@ function updateHUD3d() {
     const s = el(`wslot-${i}`);
     if (s) s.className = `wslot${i === wIdx ? ' active' : ''}`;
   }
-
-  _drawMinimap();
 }
 
 function _drawMinimap() {
@@ -1253,6 +1250,8 @@ function render3d() {
   renderer.clearDepth();
   if (weaponGroup && gameState === 'playing') renderer.render(weaponScene, weaponCamera);
   renderer.autoClear = true;
+
+  _drawMinimap();
 }
 
 // =============================================================================
@@ -1329,3 +1328,121 @@ function endGame3d(won) {
 // =============================================================================
 
 function lerp3(a, b, t) { return a + (b-a) * Math.max(0, Math.min(1, t)); }
+
+// =============================================================================
+//  WEAPON LOCKER DATA
+// =============================================================================
+
+const ALL_GUNS = [
+  { id:'ar',      name:'Sturmgewehr',    icon:'⚙️',  dmg:22,  rate:0.11, maxAmmo:30, maxRes:90,  spread:0.024, range:500,  crit:0.10, rarity:'uncommon', desc:'Ausgeglichen · 22 Schaden' },
+  { id:'shotgun', name:'Schrotflinte',   icon:'💥',  dmg:13,  rate:0.65, maxAmmo:6,  maxRes:30,  spread:0.13,  range:75,   crit:0.05, rarity:'uncommon', desc:'8 Schuss · Nahkampf', pellets:8 },
+  { id:'sniper',  name:'Scharfschütze',  icon:'🔭',  dmg:90,  rate:1.60, maxAmmo:5,  maxRes:20,  spread:0.001, range:1200, crit:0.40, rarity:'epic',      desc:'90 Schaden · Langstrecke' },
+  { id:'pistol',  name:'Pistole',        icon:'🔫',  dmg:28,  rate:0.35, maxAmmo:15, maxRes:60,  spread:0.040, range:300,  crit:0.08, rarity:'common',    desc:'Schnell nachladen · 28 Schaden' },
+  { id:'smg',     name:'MP5',            icon:'⚡',  dmg:14,  rate:0.07, maxAmmo:35, maxRes:105, spread:0.055, range:200,  crit:0.05, rarity:'uncommon',  desc:'Hohes Feuerrate · 14 Schaden' },
+  { id:'lmg',     name:'Maschinengewehr',icon:'🔥',  dmg:18,  rate:0.09, maxAmmo:60, maxRes:120, spread:0.045, range:400,  crit:0.06, rarity:'rare',      desc:'60 Schuss Magazin · 18 Schaden' },
+  { id:'deagle',  name:'Desert Eagle',   icon:'💫',  dmg:55,  rate:0.55, maxAmmo:7,  maxRes:28,  spread:0.030, range:450,  crit:0.20, rarity:'rare',      desc:'Halbautomatisch · 55 Schaden' },
+  { id:'laser',   name:'Lasergewehr',    icon:'🌟',  dmg:35,  rate:0.15, maxAmmo:20, maxRes:60,  spread:0.005, range:800,  crit:0.15, rarity:'legendary', desc:'Kein Streuung · 35 Schaden' },
+];
+
+const RARITY_COLORS = {
+  common:    '#b4b4b4',
+  uncommon:  '#00c864',
+  rare:      '#0078d4',
+  epic:      '#8b5cf6',
+  legendary: '#f5c518',
+};
+
+const RARITY_NAMES = {
+  common:    'GEWÖHNLICH',
+  uncommon:  'UNGEWÖHNLICH',
+  rare:      'SELTEN',
+  epic:      'EPISCH',
+  legendary: 'LEGENDÄR',
+};
+
+// Selected loadout (3 indices into ALL_GUNS)
+let selectedLoadout = [0, 1, 2];
+
+function loadWeaponLoadout() {
+  try {
+    const s = localStorage.getItem('fortclash_loadout');
+    if (s) {
+      const arr = JSON.parse(s);
+      if (Array.isArray(arr)) selectedLoadout = arr.filter(i => i >= 0 && i < ALL_GUNS.length).slice(0, 3);
+    }
+  } catch {}
+  while (selectedLoadout.length < 3) {
+    const next = ALL_GUNS.findIndex((_, i) => !selectedLoadout.includes(i));
+    selectedLoadout.push(next >= 0 ? next : 0);
+  }
+}
+
+function saveWeaponLoadout() {
+  try { localStorage.setItem('fortclash_loadout', JSON.stringify(selectedLoadout)); } catch {}
+}
+
+loadWeaponLoadout();
+
+// =============================================================================
+//  WEAPON LOCKER UI
+// =============================================================================
+
+function openWeaponLocker() {
+  renderWeaponSelect();
+  showScreen('weapon-locker');
+}
+
+function renderWeaponSelect() {
+  const grid = document.getElementById('weapon-select-grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  // Update slot display
+  for (let s = 0; s < 3; s++) {
+    const nameEl = document.getElementById(`wl-name-${s}`);
+    const boxEl  = document.getElementById(`wl-slot-${s}`);
+    const gunIdx = selectedLoadout[s];
+    const gun    = ALL_GUNS[gunIdx];
+    if (nameEl) nameEl.textContent = gun ? gun.name : '-';
+    if (boxEl)  boxEl.className = `weapon-slot-box${gun ? ' filled' : ''}`;
+  }
+
+  // Render weapon cards
+  ALL_GUNS.forEach((gun, idx) => {
+    const slotNum = selectedLoadout.indexOf(idx);
+    const inLoadout = slotNum >= 0;
+
+    const card = document.createElement('div');
+    card.className = `weapon-card rarity-${gun.rarity}${inLoadout ? ' selected' : ''}`;
+    card.innerHTML = `
+      <div class="weapon-card-icon">${gun.icon}</div>
+      <div class="weapon-card-info">
+        <div class="weapon-card-name">${gun.name}</div>
+        <div class="weapon-card-rarity" style="color:${RARITY_COLORS[gun.rarity]}">${RARITY_NAMES[gun.rarity]}</div>
+        <div class="weapon-card-desc">${gun.desc}</div>
+      </div>
+      ${inLoadout ? `<div class="weapon-card-slot">SLOT ${slotNum + 1}</div>` : ''}
+    `;
+    card.addEventListener('click', () => toggleWeapon(idx));
+    grid.appendChild(card);
+  });
+}
+
+function toggleWeapon(idx) {
+  const slotNum = selectedLoadout.indexOf(idx);
+  if (slotNum >= 0) {
+    // Remove from loadout
+    selectedLoadout.splice(slotNum, 1);
+  } else if (selectedLoadout.length < 3) {
+    // Add to loadout
+    selectedLoadout.push(idx);
+  }
+  // Ensure exactly 3 slots
+  while (selectedLoadout.length < 3) {
+    const next = ALL_GUNS.findIndex((_, i) => !selectedLoadout.includes(i));
+    if (next >= 0) selectedLoadout.push(next);
+    else break;
+  }
+  saveWeaponLoadout();
+  renderWeaponSelect();
+}

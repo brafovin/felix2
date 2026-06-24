@@ -19,6 +19,7 @@
       <button class="btn btn-primary" onclick="showScreen('lobby')">SPIELEN</button>
       <button class="btn btn-secondary" onclick="showScreen('battlepass')">BATTLE PASS</button>
       <button class="btn btn-secondary" onclick="showScreen('locker')">LOCKER</button>
+      <button class="btn btn-secondary" onclick="openWeaponLocker()">WAFFEN</button>
     </div>
     <div class="menu-stats">
       <div class="stat"><span class="stat-label">SIEGE</span><span class="stat-value" id="menu-wins">0</span></div>
@@ -188,6 +189,30 @@
     </div>
     <button class="btn btn-primary" onclick="showScreen('main-menu')">WEITER</button>
   </div>
+</div>
+
+<!-- WEAPON LOCKER -->
+<div id="weapon-locker" class="screen">
+  <div class="screen-header">
+    <h2>WAFFEN <span class="season-label">LOADOUT</span></h2>
+    <button class="btn btn-back" onclick="showScreen('main-menu')">← ZURÜCK</button>
+  </div>
+  <div class="weapon-loadout-slots">
+    <div class="weapon-slot-box" id="wl-slot-0">
+      <div class="wl-slot-num">SLOT 1</div>
+      <div class="wl-slot-name" id="wl-name-0">-</div>
+    </div>
+    <div class="weapon-slot-box" id="wl-slot-1">
+      <div class="wl-slot-num">SLOT 2</div>
+      <div class="wl-slot-name" id="wl-name-1">-</div>
+    </div>
+    <div class="weapon-slot-box" id="wl-slot-2">
+      <div class="wl-slot-num">SLOT 3</div>
+      <div class="wl-slot-name" id="wl-name-2">-</div>
+    </div>
+  </div>
+  <p class="weapon-hint">Klicke auf eine Waffe um sie deinem Loadout hinzuzufügen (max 3)</p>
+  <div id="weapon-select-grid" class="weapon-select-grid"></div>
 </div>
 
 <script src="js/skins.js"></script>

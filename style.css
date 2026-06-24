@@ -1029,3 +1029,100 @@ kbd {
 /* ─── GAME SCREEN CURSOR ─── */
 #game-screen { cursor: none; }
 }
+
+/* ─── WEAPON LOCKER ─── */
+.weapon-loadout-slots {
+  display: flex;
+  gap: 16px;
+  padding: 20px 32px;
+  justify-content: center;
+  background: rgba(0,0,0,0.3);
+  border-bottom: 1px solid var(--border);
+}
+
+.weapon-slot-box {
+  width: 160px;
+  padding: 12px 16px;
+  border: 2px solid rgba(255,255,255,0.15);
+  border-radius: 8px;
+  text-align: center;
+  background: rgba(255,255,255,0.04);
+}
+
+.weapon-slot-box.filled {
+  border-color: var(--gold);
+  background: rgba(245,197,24,0.08);
+}
+
+.wl-slot-num {
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: rgba(255,255,255,0.4);
+  margin-bottom: 4px;
+}
+
+.wl-slot-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.weapon-hint {
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255,255,255,0.4);
+  padding: 10px;
+}
+
+.weapon-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+  padding: 16px 24px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.weapon-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--card-bg);
+  border: 2px solid var(--border);
+  cursor: pointer;
+  transition: all 0.15s;
+  position: relative;
+}
+
+.weapon-card:hover { background: rgba(255,255,255,0.1); transform: translateY(-1px); }
+.weapon-card.selected { border-color: var(--gold); background: rgba(245,197,24,0.1); }
+
+.weapon-card.rarity-common    { border-color: rgba(180,180,180,0.4); }
+.weapon-card.rarity-uncommon  { border-color: rgba(0,200,100,0.5); }
+.weapon-card.rarity-rare      { border-color: rgba(0,120,212,0.6); }
+.weapon-card.rarity-epic      { border-color: rgba(139,92,246,0.7); }
+.weapon-card.rarity-legendary { border-color: rgba(245,197,24,0.8); }
+
+.weapon-card.selected.rarity-common    { background: rgba(180,180,180,0.1); }
+.weapon-card.selected.rarity-uncommon  { background: rgba(0,200,100,0.08); }
+.weapon-card.selected.rarity-rare      { background: rgba(0,120,212,0.1); }
+.weapon-card.selected.rarity-epic      { background: rgba(139,92,246,0.1); }
+.weapon-card.selected.rarity-legendary { background: rgba(245,197,24,0.1); }
+
+.weapon-card-icon { font-size: 36px; min-width: 44px; text-align: center; }
+.weapon-card-name { font-size: 15px; font-weight: 700; margin-bottom: 2px; }
+.weapon-card-rarity { font-size: 11px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-bottom: 4px; }
+.weapon-card-desc { font-size: 12px; color: rgba(255,255,255,0.5); }
+.weapon-card-slot {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: var(--gold);
+  color: #000;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 3px;
+  letter-spacing: 1px;
+}
