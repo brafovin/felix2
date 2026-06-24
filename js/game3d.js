@@ -21,6 +21,10 @@ let controlMode = 'pc';
 let touchMove = { x: 0, y: 0 };       // analog joystick vector (-1..1)
 let touchControlsReady = false;
 
+// ── Multiplayer ────────────────────────────────────────────────────────────────
+let mpMode = false;
+let remotePlayers = {};   // peerId -> { group, tx,ty,tz, tyaw, hp, alive, name }
+
 // ── Player state ──────────────────────────────────────────────────────────────
 let camPos, camVY = 0, camGrounded = true;
 let playerHP = 100, playerShield = 0, playerAlive = true, playerKills = 0;
@@ -680,10 +684,10 @@ class Enemy3D {
   }
 }
 
-function spawnEnemies3d() {
+function spawnEnemies3d(count = INIT_BOTS) {
   enemies3d.forEach(e => { if (e.group) scene.remove(e.group); });
   enemies3d = [];
-  for (let i = 0; i < INIT_BOTS; i++) {
+  for (let i = 0; i < count; i++) {
     enemies3d.push(new Enemy3D(
       (Math.random()-0.5)*WORLD_SIZE,
       (Math.random()-0.5)*WORLD_SIZE,
@@ -880,17 +884,19 @@ function buildBusMesh() {
 //  START GAME
 // =============================================================================
 
-function startGame() {
+function startGame(opts) {
+  mpMode = !!(opts && opts.mp);
   showScreen('game-screen');
   if (!renderer) initThree();
 
   // Reset state
   eBullets = []; hitFX = [];
+  mpReset();
 
   buildWorld();
   spawnPickups3d();
   spawnChests3d();
-  spawnEnemies3d();
+  spawnEnemies3d(mpMode ? 0 : INIT_BOTS);   // no bots in multiplayer
 
   camPos = new THREE.Vector3(0, EYE_H, 0);
   camVY = 0; camGrounded = true;
@@ -902,7 +908,46 @@ function startGame() {
   if (weaponGroup) { weaponScene.remove(weaponGroup); weaponGroup = null; }
   renderWeaponSlots();
 
-  // Bus path
+  // Storm (shared deterministic centre)
+  sCX = 0; sCZ = 0; sCR = WORLD_SIZE * 0.55;
+  sTX = 0; sTZ = 0; sTR = sCR;
+  sShrinking = false; sTimer = S_PHASES[0].wait; sPhase = 0; sDmg = 2; sWarned = false;
+  buildStormMesh();
+
+  gameTime = 0; startTime = Date.now();
+  keys = {}; shooting = false;
+  playerAlt = 0; gliderOpen = false; freefallT = 0;
+
+  if (mpMode) {
+    // Multiplayer: skip the bus, drop straight onto the ground
+    bus = null;
+    if (busGroup) { scene.remove(busGroup); busGroup = null; }
+    const sx = (Math.random() - 0.5) * 160, sz = (Math.random() - 0.5) * 160;
+    camPos = new THREE.Vector3(sx, terrainHeight(sx, sz) + EYE_H, sz);
+    camGrounded = true;
+    gameState = 'playing';
+    yaw = Math.random() * Math.PI * 2; pitch = 0;
+    setupInput3d();
+    if (controlMode === 'mobile') { setupTouchControls(); showMobileControls(true); }
+    else showMobileControls(false);
+    showBusHUD(false);
+    const mmsg = document.getElementById('pointer-lock-msg');
+    if (mmsg) mmsg.style.display = controlMode === 'pc' ? 'flex' : 'none';
+    if (animFrame) cancelAnimationFrame(animFrame);
+    let lastM = performance.now();
+    (function mloop(now) {
+      const dt = Math.min((now - lastM) / 1000, 0.05);
+      lastM = now;
+      tick3d(dt);
+      mpInterpolate(dt);
+      if (window.NET && NET.active) NET.tick(dt);
+      render3d();
+      animFrame = requestAnimationFrame(mloop);
+    })(performance.now());
+    return;
+  }
+
+  // ── Solo: Bus path ──
   const pathLen = WORLD_SIZE + 800;
   const ang = (Math.random() - 0.5) * 0.35;
   const offX = (Math.random()-0.5)*300, offZ = (Math.random()-0.5)*300;
@@ -928,17 +973,7 @@ function startGame() {
     e.group.position.set(e.busLandX, 0, e.busLandZ);
   });
 
-  // Storm
-  sCX = 0; sCZ = 0; sCR = WORLD_SIZE * 0.55;
-  sTX = 0; sTZ = 0; sTR = sCR;
-  sShrinking = false; sTimer = S_PHASES[0].wait; sPhase = 0; sDmg = 2; sWarned = false;
-  buildStormMesh();
-
-  playerAlt = 0; gliderOpen = false; freefallT = 0;
   gameState = 'bus';
-  gameTime = 0; startTime = Date.now();
-  keys = {}; shooting = false;
-
   buildBusMesh();
 
   // Camera attaches to bus
@@ -1137,7 +1172,7 @@ function tick3d(dt) {
     updateHUD3d();
 
     if (!playerAlive) endGame3d(false);
-    if (enemies3d.filter(e=>e.alive).length === 0) endGame3d(true);
+    if (!mpMode && enemies3d.filter(e=>e.alive).length === 0) endGame3d(true);
   }
 }
 
@@ -1328,6 +1363,11 @@ function _fire() {
     raycaster.far = g.range;
 
     const targets = enemies3d.filter(e => e.alive && e.activated).map(e => e.group);
+    // Remote players are valid targets in multiplayer
+    const remoteGroups = [];
+    if (mpMode) Object.entries(remotePlayers).forEach(([id, r]) => {
+      if (r.alive) { r.group.userData._pid = id; remoteGroups.push(r.group); targets.push(r.group); }
+    });
     const hits    = raycaster.intersectObjects(targets, true);
 
     // Tracer start: just in front of camera (gun barrel position)
@@ -1337,7 +1377,7 @@ function _fire() {
       const hit = hits[0];
       spawnTracer(tracerStart, hit.point);
 
-      // Walk up to find the Enemy3D group
+      // Walk up to find the owning group
       let obj = hit.object;
       while (obj.parent && obj.parent !== scene) obj = obj.parent;
       const enemy = enemies3d.find(e => e.group === obj);
@@ -1350,6 +1390,15 @@ function _fire() {
         _showDmgNum(hit.point, dmg, crit);
         spawnHitFX(hit.point.clone(), 0xef4444);
         if (killed) { playerKills++; addKillFeedEntry('Du', enemy.name, '🔫'); }
+      } else if (mpMode && obj.userData._pid) {
+        // Hit a remote player — report damage over the network
+        const pid = obj.userData._pid;
+        const isHead = hit.object.position.y > 1.6;
+        const crit   = isHead || Math.random() < g.crit;
+        const dmg    = Math.round(g.dmg * (crit ? 2.2 : 1) * (isHead ? 1.5 : 1));
+        _showDmgNum(hit.point, dmg, crit);
+        spawnHitFX(hit.point.clone(), 0xef4444);
+        if (window.NET && NET.active) NET.sendHit(pid, dmg);
       }
     } else {
       // Miss — tracer flies to max range
@@ -1357,6 +1406,24 @@ function _fire() {
       spawnTracer(tracerStart, missEnd);
     }
   }
+
+  // Broadcast the shot so others see a tracer
+  if (mpMode && window.NET && NET.active) {
+    const sStart = camPos.clone();
+    const sEnd   = camPos.clone().add(new THREE.Vector3(0,0,-1).applyEuler(camera.rotation).multiplyScalar(g.range));
+    NET.sendShot(sStart, sEnd);
+  }
+}
+
+// Called by the net layer to show an incoming tracer from a remote shooter
+function mpSpawnTracer(sx, sy, sz, ex, ey, ez) {
+  if (!scene) return;
+  spawnTracer(new THREE.Vector3(sx, sy, sz), new THREE.Vector3(ex, ey, ez));
+}
+
+// Called by the net layer when a remote player damaged us
+function mpApplyDamage(dmg) {
+  _hurtPlayer(dmg);
 }
 
 function _showDmgNum(worldPos, dmg, crit) {
@@ -1598,6 +1665,92 @@ function _drawMinimap() {
 }
 
 // =============================================================================
+//  MULTIPLAYER — remote player avatars
+// =============================================================================
+
+function mpReset() {
+  Object.values(remotePlayers).forEach(r => { if (scene) scene.remove(r.group); });
+  remotePlayers = {};
+}
+
+function _remoteColor(id) {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) & 0xffffff;
+  return (h | 0x303030) & 0xffffff;
+}
+
+function _makeNameSprite(text) {
+  const cv = document.createElement('canvas'); cv.width = 256; cv.height = 64;
+  const cx = cv.getContext('2d');
+  cx.fillStyle = 'rgba(0,0,0,0.45)';
+  cx.fillRect(0, 18, 256, 30);
+  cx.font = 'bold 28px sans-serif'; cx.fillStyle = '#fff';
+  cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  cx.fillText((text || 'Spieler').slice(0, 14), 128, 34);
+  const spr = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), depthTest: false }));
+  spr.scale.set(2.4, 0.6, 1);
+  return spr;
+}
+
+function makeRemoteAvatar(id, name) {
+  const g = new THREE.Group();
+  const col = _remoteColor(id);
+  const bm = new THREE.MeshLambertMaterial({ color: col });
+  const sm = new THREE.MeshLambertMaterial({ color: 0xffe0a0 });
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.9, 0.35), bm); torso.position.y = 1.15; torso.castShadow = true; g.add(torso);
+  const head  = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), sm);  head.position.y = 1.85; g.add(head);
+  const legL  = new THREE.Mesh(new THREE.BoxGeometry(0.22, 0.8, 0.25), bm); legL.position.set(-0.16, 0.4, 0); g.add(legL);
+  const legR  = legL.clone(); legR.position.x = 0.16; g.add(legR);
+  const armL  = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.7, 0.2), bm);  armL.position.set(-0.4, 1.2, 0); g.add(armL);
+  const armR  = armL.clone(); armR.position.x = 0.4; g.add(armR);
+  const tag = _makeNameSprite(name); tag.position.y = 2.45; g.add(tag);
+  return g;
+}
+
+// Called by net layer when a remote state arrives
+function mpUpsert(id, s) {
+  if (!scene) return;
+  let r = remotePlayers[id];
+  if (!r) {
+    const group = makeRemoteAvatar(id, s.name);
+    group.position.set(s.x, (s.y || EYE_H) - EYE_H, s.z);
+    scene.add(group);
+    r = remotePlayers[id] = { group, tx: s.x, ty: (s.y || EYE_H) - EYE_H, tz: s.z, tyaw: s.yaw || 0, hp: 100, alive: true, name: s.name };
+  }
+  r.tx = s.x; r.ty = (s.y || EYE_H) - EYE_H; r.tz = s.z; r.tyaw = s.yaw || 0;
+  if (s.hp != null) r.hp = s.hp;
+  r.alive = s.alive !== false;
+  r.group.visible = r.alive;
+}
+
+function mpRemove(id) {
+  const r = remotePlayers[id];
+  if (r) { if (scene) scene.remove(r.group); delete remotePlayers[id]; }
+}
+
+function mpInterpolate(dt) {
+  const k = Math.min(1, dt * 12);
+  Object.values(remotePlayers).forEach(r => {
+    r.group.position.x += (r.tx - r.group.position.x) * k;
+    r.group.position.y += (r.ty - r.group.position.y) * k;
+    r.group.position.z += (r.tz - r.group.position.z) * k;
+    let dy = r.tyaw - r.group.rotation.y;
+    while (dy >  Math.PI) dy -= Math.PI * 2;
+    while (dy < -Math.PI) dy += Math.PI * 2;
+    r.group.rotation.y += dy * k;
+  });
+}
+
+// Local player state snapshot for the network
+function mpLocalState() {
+  return {
+    x: camPos.x, y: camPos.y, z: camPos.z,
+    yaw, hp: playerHP, alive: playerAlive,
+    wname: GUNS[wIdx] ? GUNS[wIdx].name : null,
+  };
+}
+
+// =============================================================================
 //  RENDER
 // =============================================================================
 
@@ -1663,6 +1816,7 @@ function endGame3d(won) {
   teardownInput3d();
   showMobileControls(false);
   showBusHUD(false); showGlideHUD(false);
+  if (mpMode && window.NET && NET.active) { NET.tick(0); if (!won) NET.leave(); }
 
   const elapsed = (Date.now() - startTime) / 1000;
   const mins = Math.floor(elapsed/60), secs = Math.floor(elapsed%60);

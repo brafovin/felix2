@@ -6,6 +6,7 @@
   <title>FortClash - Battle Royale</title>
   <link rel="stylesheet" href="style.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+  <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 </head>
 <body>
 
@@ -38,6 +39,7 @@
     <p class="game-subtitle">BATTLE ROYALE</p>
     <div class="menu-buttons">
       <button class="btn btn-primary" onclick="showScreen('lobby')">SPIELEN</button>
+      <button class="btn btn-primary" onclick="openMultiplayer()">MEHRSPIELER</button>
       <button class="btn btn-secondary" onclick="showScreen('battlepass')">BATTLE PASS</button>
       <button class="btn btn-secondary" onclick="showScreen('locker')">LOCKER</button>
       <button class="btn btn-secondary" onclick="openWeaponLocker()">WAFFEN</button>
@@ -218,6 +220,47 @@
   </div>
 </div>
 
+<!-- MULTIPLAYER (create/join) -->
+<div id="multiplayer" class="screen">
+  <div class="screen-header">
+    <h2>MEHRSPIELER</h2>
+    <button class="btn btn-back" onclick="showScreen('main-menu')">← ZURÜCK</button>
+  </div>
+  <div class="mp-wrap">
+    <input id="mp-name" class="mp-input" maxlength="14" placeholder="Dein Name" value="Spieler">
+    <div class="mp-cards">
+      <div class="mp-card">
+        <h3>RAUM ERSTELLEN</h3>
+        <label class="mp-label">Max. Spieler: <span id="mp-maxlabel">4</span></label>
+        <input id="mp-maxplayers" type="range" min="2" max="10" value="4"
+               oninput="document.getElementById('mp-maxlabel').textContent=this.value">
+        <button class="btn btn-primary" onclick="mpCreateRoom()">RAUM ERSTELLEN</button>
+      </div>
+      <div class="mp-card">
+        <h3>RAUM BEITRETEN</h3>
+        <input id="mp-joincode" class="mp-input mp-code-input" maxlength="4" placeholder="CODE">
+        <button class="btn btn-primary" onclick="mpJoinRoom()">BEITRETEN</button>
+      </div>
+    </div>
+    <div id="mp-status" class="mp-status"></div>
+  </div>
+</div>
+
+<!-- MULTIPLAYER ROOM (lobby) -->
+<div id="mp-room" class="screen">
+  <div class="screen-header">
+    <h2>RAUM <span id="mp-room-code" class="season-label">----</span></h2>
+    <button class="btn btn-back" onclick="mpLeaveRoom()">← VERLASSEN</button>
+  </div>
+  <div class="mp-wrap">
+    <div class="mp-roominfo">Spieler <span id="mp-count">1/4</span></div>
+    <div id="mp-player-list" class="mp-player-list"></div>
+    <button id="mp-start-btn" class="btn btn-primary big" onclick="mpStartMatch()">SPIEL STARTEN ▶</button>
+    <div id="mp-wait" class="mp-wait">⏳ Warte auf den Host…</div>
+    <div class="mp-hint">Teile den Code oben mit deinen Freunden, damit sie beitreten können.</div>
+  </div>
+</div>
+
 <!-- WEAPON LOCKER -->
 <div id="weapon-locker" class="screen">
   <div class="screen-header">
@@ -245,6 +288,7 @@
 <script src="js/skins.js"></script>
 <script src="js/battle-pass.js"></script>
 <script src="js/game3d.js"></script>
+<script src="js/net.js"></script>
 <script src="js/ui.js"></script>
 </body>
 </html>
